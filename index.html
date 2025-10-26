@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JJ Portfolio</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1a73e8" />
+  <link rel="icon" href="image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💼</text></svg>">
+</head>
+<body>
+  <header>
+    <h1>JJ Portfolio</h1>
+  </header>
+
+  <main>
+    <section id="add-investment">
+      <h2>Añadir Inversión</h2>
+      <div class="form-group">
+        <label>Tipo:</label>
+        <select id="assetType">
+          <option value="stock">Acción</option>
+          <option value="etf">ETF</option>
+          <option value="crypto">Criptomoneda</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Símbolo (ej: AAPL, BTC):</label>
+        <input type="text" id="symbol" placeholder="AAPL, BTC..." required />
+      </div>
+      <div class="form-group">
+        <label>Cantidad:</label>
+        <input type="number" id="quantity" step="any" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>Precio de compra:</label>
+        <input type="number" id="buyPrice" step="any" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>Fecha de compra:</label>
+        <input type="date" id="buyDate" required />
+      </div>
+      <button id="btnAddInvestment">Añadir Inversión</button>
+    </section>
+
+    <section id="add-dividend">
+      <h2>Añadir Dividendo</h2>
+      <div class="form-group">
+        <label>Símbolo:</label>
+        <input type="text" id="divSymbol" placeholder="AAPL..." required />
+      </div>
+      <div class="form-group">
+        <label>Cantidad recibida:</label>
+        <input type="number" id="divAmount" step="any" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>Fecha:</label>
+        <input type="date" id="divDate" required />
+      </div>
+      <button id="btnAddDividend">Añadir Dividendo</button>
+    </section>
+
+    <section id="portfolio">
+      <h2>Portfolio</h2>
+      <button id="btnRefreshPrices">Actualizar Precios</button>
+      <div id="portfolioList"></div>
+    </section>
+
+    <section id="dividends">
+      <h2>Dividendos</h2>
+      <div id="dividendsList"></div>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+  <script src="app.js"></script>
+</body>
+        </html>
