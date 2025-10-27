@@ -19,9 +19,8 @@ function formatCurrency(value) {
   }).format(value);
 }
 
-// --- APIs (solo públicas, sin claves) ---
+// --- APIs públicas (sin clave) ---
 async function fetchStockPrice(symbol) {
-  // Probar con el símbolo tal cual (incluyendo .MC si el usuario lo pone)
   try {
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
     const res = await fetch(url);
@@ -69,20 +68,21 @@ async function renderTransactions() {
     const gain = currentValue - cost;
     const gainPct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : '0.00';
 
-    // Indicador visual si el precio no se ha actualizado automáticamente
-    const priceStatus = t.currentPrice ? '' : ' <span style="color:#ff9800; font-size:0.9em">(precio de compra)</span>';
+    // ¿El precio actual es el mismo que el de compra? → probablemente no se actualizó
+    const needsManualUpdate = !t.currentPrice || t.currentPrice === t.buyPrice;
 
     html += `
       <div class="transaction-item">
         <div>
           <strong>${t.symbol}</strong> (${t.assetType})<br>
           Cantidad: ${t.quantity} | Compra: ${formatCurrency(t.buyPrice)}<br>
-          Actual: ${formatCurrency(currentPrice)}${priceStatus} | Valor: ${formatCurrency(currentValue)}<br>
+          Actual: ${formatCurrency(currentPrice)} | Valor: ${formatCurrency(currentValue)}<br>
           Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
             ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)
           </span>
         </div>
         <div class="actions">
+          ${needsManualUpdate ? `<button class="manual-update-btn" data-id="${t.id}">Actualizar manualmente</button>` : ''}
           <button class="edit-btn" data-id="${t.id}">Editar</button>
           <button class="delete-btn" data-id="${t.id}">Eliminar</button>
         </div>
@@ -116,7 +116,7 @@ async function renderDividends() {
   list.innerHTML = html;
 }
 
-// --- Actualizar precios ---
+// --- Actualizar precios (automático) ---
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -130,7 +130,6 @@ async function refreshPrices() {
     if (t.assetType === 'crypto') {
       price = await fetchCryptoPrice(t.symbol);
     } else {
-      // Probar con el símbolo tal cual (el usuario puede poner BBVA.MC si quiere)
       price = await fetchStockPrice(t.symbol);
     }
     if (price !== null) {
@@ -139,17 +138,34 @@ async function refreshPrices() {
     }
   }
   await renderTransactions();
-  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Consejo: Para acciones europeas como BBVA, introduce el símbolo completo (ej. BBVA.MC) al crear la transacción.`);
+  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC) al crear la transacción.`);
 }
 
-// --- Editar transacción (ahora permite editar currentPrice también) ---
+// --- Actualización manual ---
+async function manualUpdatePrice(id) {
+  const tx = await db.transactions.get(id);
+  if (!tx) return;
+
+  const newPriceStr = prompt(`Introduce el precio actual de ${tx.symbol} (€):`, tx.currentPrice || tx.buyPrice);
+  if (newPriceStr === null) return; // cancelado
+
+  const newPrice = parseFloat(newPriceStr.replace(',', '.'));
+  if (isNaN(newPrice) || newPrice <= 0) {
+    alert('Por favor, introduce un número válido mayor que 0.');
+    return;
+  }
+
+  await db.transactions.update(id, { currentPrice: newPrice });
+  renderTransactions();
+}
+
+// --- Edición completa ---
 async function editTransaction(id) {
   const tx = await db.transactions.get(id);
   if (!tx) return;
 
-  // Creamos un formulario de edición más completo
   const newSymbol = prompt('Símbolo:', tx.symbol);
-  if (newSymbol === null) return; // cancelado
+  if (newSymbol === null) return;
 
   const newQuantity = prompt('Cantidad:', tx.quantity);
   if (newQuantity === null) return;
@@ -163,7 +179,6 @@ async function editTransaction(id) {
   const newDate = prompt('Fecha de compra (AAAA-MM-DD):', tx.buyDate);
   if (newDate === null) return;
 
-  // Validación básica
   if (isNaN(newQuantity) || isNaN(newBuyPrice) || isNaN(newCurrentPrice)) {
     alert('Valores numéricos inválidos.');
     return;
@@ -193,7 +208,6 @@ document.getElementById('btnAddTransaction').addEventListener('click', async () 
     return;
   }
 
-  // Al crear, currentPrice = buyPrice por defecto
   await db.transactions.add({
     symbol, assetType, quantity, buyPrice, buyDate,
     currentPrice: buyPrice,
@@ -228,10 +242,11 @@ document.getElementById('btnAddDividend').addEventListener('click', async () => 
 
 document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
 
-// Eventos delegados
+// --- Eventos delegados ---
 document.addEventListener('click', async (e) => {
+  const id = parseInt(e.target.dataset.id);
+
   if (e.target.classList.contains('delete-btn')) {
-    const id = parseInt(e.target.dataset.id);
     if (e.target.classList.contains('dividend-delete')) {
       await db.dividends.delete(id);
       renderDividends();
@@ -242,18 +257,21 @@ document.addEventListener('click', async (e) => {
   }
 
   if (e.target.classList.contains('edit-btn')) {
-    const id = parseInt(e.target.dataset.id);
     editTransaction(id);
+  }
+
+  if (e.target.classList.contains('manual-update-btn')) {
+    manualUpdatePrice(id);
   }
 });
 
-// Inicializar
+// --- Inicializar ---
 document.getElementById('buyDate').value = today();
 document.getElementById('divDate').value = today();
 renderTransactions();
 renderDividends();
 
-// Service Worker
+// --- Service Worker ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js');
