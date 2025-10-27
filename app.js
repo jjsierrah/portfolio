@@ -1,7 +1,7 @@
 // --- IndexedDB con Dexie ---
 const db = new Dexie('JJPortfolioDB');
-db.version(1).stores({
-  investments: '++id, symbol, assetType, quantity, buyPrice, buyDate',
+db.version(2).stores({
+  transactions: '++id, symbol, assetType, quantity, buyPrice, buyDate',
   dividends: '++id, symbol, amount, date'
 });
 
@@ -11,11 +11,21 @@ function today() {
   return d.toISOString().split('T')[0];
 }
 
-// --- Yahoo Finance (acciones/ETFs) ---
+function formatCurrency(value) {
+  return new Intl.NumberFormat('es-ES', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+// --- APIs de precios ---
 async function fetchStockPrice(symbol) {
   try {
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
     const res = await fetch(url);
+    if (!res.ok) return null;
     const data = await res.json();
     const quote = data.quoteResponse?.result?.[0];
     return quote?.regularMarketPrice || null;
@@ -25,22 +35,24 @@ async function fetchStockPrice(symbol) {
   }
 }
 
-// --- CoinGecko (criptomonedas) ---
 async function fetchCryptoPrice(symbol) {
   const cryptoMap = {
     'BTC': 'bitcoin',
     'ETH': 'ethereum',
     'SOL': 'solana',
     'ADA': 'cardano',
-    // Puedes ampliar este mapa
+    'DOT': 'polkadot',
+    'LINK': 'chainlink',
+    'XRP': 'ripple'
   };
   const id = cryptoMap[symbol.toUpperCase()];
   if (!id) return null;
 
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data[id]?.usd || null;
+    return data[id]?.eur || null;
   } catch (e) {
     console.warn('Error fetching crypto price for', symbol, e);
     return null;
@@ -48,28 +60,36 @@ async function fetchCryptoPrice(symbol) {
 }
 
 // --- Render ---
-async function renderPortfolio() {
-  const list = document.getElementById('portfolioList');
-  const investments = await db.investments.toArray();
-  if (investments.length === 0) {
-    list.innerHTML = '<p>No hay inversiones registradas.</p>';
+async function renderTransactions() {
+  const list = document.getElementById('transactionsList');
+  const transactions = await db.transactions.toArray();
+  if (transactions.length === 0) {
+    list.innerHTML = '<p>No hay transacciones registradas.</p>';
     return;
   }
 
   let html = '';
-  for (const inv of investments) {
-    const currentPrice = inv.currentPrice || inv.buyPrice;
-    const currentValue = inv.quantity * currentPrice;
-    const cost = inv.quantity * inv.buyPrice;
+  for (const t of transactions) {
+    const currentPrice = t.currentPrice || t.buyPrice;
+    const currentValue = t.quantity * currentPrice;
+    const cost = t.quantity * t.buyPrice;
     const gain = currentValue - cost;
-    const gainPct = ((gain / cost) * 100).toFixed(2);
+    const gainPct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : '0.00';
 
     html += `
-      <div class="portfolio-item">
-        <strong>${inv.symbol}</strong> (${inv.assetType})<br>
-        Cantidad: ${inv.quantity} | Compra: $${inv.buyPrice}<br>
-        Actual: $${currentPrice?.toFixed(2) || '—'} | Valor: $${currentValue.toFixed(2)}<br>
-        Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">${gain >= 0 ? '+' : ''}$${gain.toFixed(2)} (${gainPct}%)</span>
+      <div class="transaction-item">
+        <div>
+          <strong>${t.symbol}</strong> (${t.assetType})<br>
+          Cantidad: ${t.quantity} | Compra: ${formatCurrency(t.buyPrice)}<br>
+          Actual: ${currentPrice ? formatCurrency(currentPrice) : '—'} | Valor: ${formatCurrency(currentValue)}<br>
+          Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
+            ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)
+          </span>
+        </div>
+        <div class="actions">
+          <button class="edit-btn" data-id="${t.id}">Editar</button>
+          <button class="delete-btn" data-id="${t.id}">Eliminar</button>
+        </div>
       </div>
     `;
   }
@@ -88,7 +108,12 @@ async function renderDividends() {
   for (const d of divs) {
     html += `
       <div class="dividend-item">
-        <strong>${d.symbol}</strong> – $${d.amount} el ${d.date}
+        <div>
+          <strong>${d.symbol}</strong> – ${formatCurrency(d.amount)} el ${d.date}
+        </div>
+        <div class="actions">
+          <button class="delete-btn dividend-delete" data-id="${d.id}">Eliminar</button>
+        </div>
       </div>
     `;
   }
@@ -97,45 +122,80 @@ async function renderDividends() {
 
 // --- Actualizar precios ---
 async function refreshPrices() {
-  const investments = await db.investments.toArray();
-  for (const inv of investments) {
+  const transactions = await db.transactions.toArray();
+  if (transactions.length === 0) {
+    alert('No hay transacciones para actualizar.');
+    return;
+  }
+
+  let updated = 0;
+  for (const t of transactions) {
     let price = null;
-    if (inv.assetType === 'crypto') {
-      price = await fetchCryptoPrice(inv.symbol);
+    if (t.assetType === 'crypto') {
+      price = await fetchCryptoPrice(t.symbol);
     } else {
-      price = await fetchStockPrice(inv.symbol);
+      price = await fetchStockPrice(t.symbol);
     }
     if (price !== null) {
-      await db.investments.update(inv.id, { currentPrice: price });
+      await db.transactions.update(t.id, { currentPrice: price });
+      updated++;
     }
   }
-  renderPortfolio();
-  alert('Precios actualizados.');
+  await renderTransactions();
+  alert(`Precios actualizados: ${updated}/${transactions.length} activos.`);
+}
+
+// --- Editar transacción (muy básico: solo recarga en formulario) ---
+async function editTransaction(id) {
+  const tx = await db.transactions.get(id);
+  if (!tx) return;
+
+  document.getElementById('symbol').value = tx.symbol;
+  document.getElementById('assetType').value = tx.assetType;
+  document.getElementById('quantity').value = tx.quantity;
+  document.getElementById('buyPrice').value = tx.buyPrice;
+  document.getElementById('buyDate').value = tx.buyDate;
+
+  // Reemplazar el botón "Añadir" por "Guardar cambios"
+  const btn = document.getElementById('btnAddTransaction');
+  btn.textContent = 'Guardar Cambios';
+  btn.dataset.editId = id;
+
+  // Scroll al formulario
+  document.getElementById('add-transaction').scrollIntoView({ behavior: 'smooth' });
 }
 
 // --- Eventos ---
-document.getElementById('btnAddInvestment').addEventListener('click', async () => {
+document.getElementById('btnAddTransaction').addEventListener('click', async (e) => {
+  const btn = e.target;
   const symbol = document.getElementById('symbol').value.trim().toUpperCase();
   const assetType = document.getElementById('assetType').value;
   const quantity = parseFloat(document.getElementById('quantity').value);
   const buyPrice = parseFloat(document.getElementById('buyPrice').value);
   const buyDate = document.getElementById('buyDate').value;
 
-  if (!symbol || isNaN(quantity) || isNaN(buyPrice)) {
+  if (!symbol || isNaN(quantity) || isNaN(buyPrice) || !buyDate) {
     alert('Por favor, completa todos los campos correctamente.');
     return;
   }
 
-  await db.investments.add({
-    symbol,
-    assetType,
-    quantity,
-    buyPrice,
-    buyDate,
-    createdAt: new Date().toISOString()
-  });
+  const editId = btn.dataset.editId;
+  if (editId) {
+    // Modo edición
+    await db.transactions.update(parseInt(editId), {
+      symbol, assetType, quantity, buyPrice, buyDate
+    });
+    delete btn.dataset.editId;
+    btn.textContent = 'Añadir Transacción';
+  } else {
+    // Modo creación
+    await db.transactions.add({
+      symbol, assetType, quantity, buyPrice, buyDate, createdAt: new Date().toISOString()
+    });
+  }
 
-  renderPortfolio();
+  renderTransactions();
+  // Reset formulario
   document.getElementById('symbol').value = '';
   document.getElementById('quantity').value = '';
   document.getElementById('buyPrice').value = '';
@@ -147,7 +207,7 @@ document.getElementById('btnAddDividend').addEventListener('click', async () => 
   const amount = parseFloat(document.getElementById('divAmount').value);
   const date = document.getElementById('divDate').value;
 
-  if (!symbol || isNaN(amount)) {
+  if (!symbol || isNaN(amount) || !date) {
     alert('Completa todos los campos.');
     return;
   }
@@ -162,10 +222,29 @@ document.getElementById('btnAddDividend').addEventListener('click', async () => 
 
 document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
 
+// Delegación de eventos para botones dinámicos
+document.addEventListener('click', async (e) => {
+  if (e.target.classList.contains('delete-btn')) {
+    const id = parseInt(e.target.dataset.id);
+    if (e.target.classList.contains('dividend-delete')) {
+      await db.dividends.delete(id);
+      renderDividends();
+    } else {
+      await db.transactions.delete(id);
+      renderTransactions();
+    }
+  }
+
+  if (e.target.classList.contains('edit-btn')) {
+    const id = parseInt(e.target.dataset.id);
+    editTransaction(id);
+  }
+});
+
 // --- Inicializar ---
 document.getElementById('buyDate').value = today();
 document.getElementById('divDate').value = today();
-renderPortfolio();
+renderTransactions();
 renderDividends();
 
 // --- Registrar Service Worker ---
@@ -173,4 +252,4 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js');
   });
-}
+      }
