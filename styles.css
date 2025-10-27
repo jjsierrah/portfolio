@@ -14,24 +14,107 @@ body {
 }
 
 header {
-  text-align: center;
-  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom: 1px solid #ddd;
 }
 
-h1 {
-  font-size: 1.8rem;
+header h1 {
+  font-size: 1.6rem;
   color: #1a73e8;
 }
 
+#mainMenu {
+  padding: 8px;
+  font-size: 1rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+section {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
 h2 {
-  margin: 16px 0 12px;
+  margin-bottom: 16px;
   font-size: 1.3rem;
 }
 
-.form-group {
+.summary-card {
+  background: #f9f9f9;
+  padding: 12px;
+  border-radius: 6px;
   margin-bottom: 12px;
+}
+
+.group-title {
+  font-weight: bold;
+  margin: 12px 0 8px;
+  color: #1a73e8;
+}
+
+.asset-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  font-size: 0.95rem;
+}
+
+.asset-item:last-child {
+  border-bottom: none;
+}
+
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background: white;
+  width: 95%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-header h3 {
+  margin: 0;
+}
+
+.close-modal {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #888;
+}
+
+.form-group {
+  margin-bottom: 14px;
 }
 
 label {
@@ -61,60 +144,17 @@ button:hover {
   opacity: 0.9;
 }
 
-.delete-btn {
-  background-color: #f44336;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  margin-left: 8px;
-}
-
-.edit-btn {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  margin-left: 8px;
-}
-
-section {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.transaction-item, .dividend-item {
-  padding: 12px 0;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.transaction-item:last-child, .dividend-item:last-child {
-  border-bottom: none;
-}
-
-.actions {
-  display: flex;
-  gap: 6px;
-}
-.manual-update-btn {
-  background-color: #ff9800;
+.delete-btn, .edit-btn {
+  background: #f44336;
   color: white;
   border: none;
   border-radius: 4px;
   padding: 4px 8px;
   cursor: pointer;
   font-size: 0.85rem;
-  margin-bottom: 4px;
-  width: 100%;
+  margin-left: 6px;
+}
+
+.edit-btn {
+  background: #4CAF50;
 }
