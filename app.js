@@ -22,17 +22,31 @@ function formatCurrency(value) {
 
 // --- APIs de precios ---
 async function fetchStockPrice(symbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const quote = data.quoteResponse?.result?.[0];
-    return quote?.regularMarketPrice || null;
-  } catch (e) {
-    console.warn('Error fetching stock price for', symbol, e);
-    return null;
+  const spanishSymbols = ['BBVA', 'SAN', 'IBE', 'TEF', 'REP', 'ITX', 'AMS', 'ELE', 'FER', 'CABK'];
+
+  const trySymbol = async (sym) => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const quote = data.quoteResponse?.result?.[0];
+      return quote?.regularMarketPrice || null;
+    } catch (e) {
+      console.warn(`Error fetching price for ${sym}:`, e);
+      return null;
+    }
+  };
+
+  let price = await trySymbol(symbol);
+  if (price !== null) return price;
+
+  if (spanishSymbols.includes(symbol.toUpperCase())) {
+    price = await trySymbol(symbol + '.MC');
+    if (price !== null) return price;
   }
+
+  return null;
 }
 
 async function fetchCryptoPrice(symbol) {
@@ -43,7 +57,9 @@ async function fetchCryptoPrice(symbol) {
     'ADA': 'cardano',
     'DOT': 'polkadot',
     'LINK': 'chainlink',
-    'XRP': 'ripple'
+    'XRP': 'ripple',
+    'MATIC': 'polygon',
+    'AVAX': 'avalanche-2'
   };
   const id = cryptoMap[symbol.toUpperCase()];
   if (!id) return null;
@@ -145,7 +161,7 @@ async function refreshPrices() {
   alert(`Precios actualizados: ${updated}/${transactions.length} activos.`);
 }
 
-// --- Editar transacción (muy básico: solo recarga en formulario) ---
+// --- Editar transacción ---
 async function editTransaction(id) {
   const tx = await db.transactions.get(id);
   if (!tx) return;
@@ -156,12 +172,10 @@ async function editTransaction(id) {
   document.getElementById('buyPrice').value = tx.buyPrice;
   document.getElementById('buyDate').value = tx.buyDate;
 
-  // Reemplazar el botón "Añadir" por "Guardar cambios"
   const btn = document.getElementById('btnAddTransaction');
   btn.textContent = 'Guardar Cambios';
   btn.dataset.editId = id;
 
-  // Scroll al formulario
   document.getElementById('add-transaction').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -181,21 +195,18 @@ document.getElementById('btnAddTransaction').addEventListener('click', async (e)
 
   const editId = btn.dataset.editId;
   if (editId) {
-    // Modo edición
     await db.transactions.update(parseInt(editId), {
       symbol, assetType, quantity, buyPrice, buyDate
     });
     delete btn.dataset.editId;
     btn.textContent = 'Añadir Transacción';
   } else {
-    // Modo creación
     await db.transactions.add({
       symbol, assetType, quantity, buyPrice, buyDate, createdAt: new Date().toISOString()
     });
   }
 
   renderTransactions();
-  // Reset formulario
   document.getElementById('symbol').value = '';
   document.getElementById('quantity').value = '';
   document.getElementById('buyPrice').value = '';
@@ -222,7 +233,7 @@ document.getElementById('btnAddDividend').addEventListener('click', async () => 
 
 document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
 
-// Delegación de eventos para botones dinámicos
+// Delegación de eventos
 document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('delete-btn')) {
     const id = parseInt(e.target.dataset.id);
@@ -247,9 +258,9 @@ document.getElementById('divDate').value = today();
 renderTransactions();
 renderDividends();
 
-// --- Registrar Service Worker ---
+// --- Service Worker ---
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js');
   });
-      }
+        }
