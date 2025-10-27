@@ -25,8 +25,20 @@
     <!-- RESUMEN PRINCIPAL -->
     <section id="portfolio-summary">
       <h2>Resumen del Portfolio</h2>
+      <button id="btnRefreshPrices" class="refresh-btn">Actualizar Precios</button>
       <div id="summary-totals"></div>
       <div id="summary-by-type"></div>
+    </section>
+
+    <!-- GRÁFICOS -->
+    <section id="charts">
+      <h2>Análisis Visual</h2>
+      <div class="chart-container">
+        <canvas id="chartByType"></canvas>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartByAsset"></canvas>
+      </div>
     </section>
   </main>
 
@@ -36,6 +48,7 @@
   </div>
 
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
