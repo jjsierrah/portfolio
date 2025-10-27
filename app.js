@@ -35,8 +35,20 @@ async function fetchStockPrice(symbol) {
 
 async function fetchCryptoPrice(symbol) {
   const cryptoMap = {
-    'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'ADA': 'cardano',
-    'DOT': 'polkadot', 'LINK': 'chainlink', 'XRP': 'ripple', 'MATIC': 'polygon'
+    'BTC': 'bitcoin',
+    'ETH': 'ethereum',
+    'SOL': 'solana',
+    'ADA': 'cardano',
+    'DOT': 'polkadot',
+    'LINK': 'chainlink',
+    'XRP': 'ripple',
+    'MATIC': 'polygon',
+    'DOGE': 'dogecoin',        // ✅ Soporte para Dogecoin
+    'SHIB': 'shiba-inu',
+    'AVAX': 'avalanche-2',
+    'UNI': 'uniswap',
+    'LTC': 'litecoin',
+    'BCH': 'bitcoin-cash'
   };
   const id = cryptoMap[symbol.toUpperCase()];
   if (!id) return null;
@@ -47,6 +59,7 @@ async function fetchCryptoPrice(symbol) {
     const data = await res.json();
     return data[id]?.eur || null;
   } catch (e) {
+    console.warn('Error fetching crypto price for', symbol, e);
     return null;
   }
 }
@@ -68,7 +81,6 @@ async function renderTransactions() {
     const gain = currentValue - cost;
     const gainPct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : '0.00';
 
-    // ¿El precio actual es el mismo que el de compra? → probablemente no se actualizó
     const needsManualUpdate = !t.currentPrice || t.currentPrice === t.buyPrice;
 
     html += `
@@ -96,7 +108,7 @@ async function renderDividends() {
   const list = document.getElementById('dividendsList');
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
-    list.innerHTML = '<p>No hay dividendos registrados.</p>';
+    list.innerHTML = '<p>No hay dividendos registradas.</p>';
     return;
   }
 
@@ -138,7 +150,7 @@ async function refreshPrices() {
     }
   }
   await renderTransactions();
-  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC) al crear la transacción.`);
+  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC).`);
 }
 
 // --- Actualización manual ---
@@ -147,7 +159,7 @@ async function manualUpdatePrice(id) {
   if (!tx) return;
 
   const newPriceStr = prompt(`Introduce el precio actual de ${tx.symbol} (€):`, tx.currentPrice || tx.buyPrice);
-  if (newPriceStr === null) return; // cancelado
+  if (newPriceStr === null) return;
 
   const newPrice = parseFloat(newPriceStr.replace(',', '.'));
   if (isNaN(newPrice) || newPrice <= 0) {
