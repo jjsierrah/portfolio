@@ -1,11 +1,10 @@
 // --- IndexedDB con Dexie ---
 const db = new Dexie('JJPortfolioDB');
 db.version(2).stores({
-  transactions: '++id, symbol, assetType, quantity, buyPrice, buyDate',
+  transactions: '++id, symbol, assetType, quantity, buyPrice, buyDate, currentPrice',
   dividends: '++id, symbol, amount, date'
 });
 
-// --- Utilidades ---
 function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
@@ -20,46 +19,25 @@ function formatCurrency(value) {
   }).format(value);
 }
 
-// --- APIs de precios ---
+// --- APIs (solo públicas, sin claves) ---
 async function fetchStockPrice(symbol) {
-  const spanishSymbols = ['BBVA', 'SAN', 'IBE', 'TEF', 'REP', 'ITX', 'AMS', 'ELE', 'FER', 'CABK'];
-
-  const trySymbol = async (sym) => {
-    try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`;
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const quote = data.quoteResponse?.result?.[0];
-      return quote?.regularMarketPrice || null;
-    } catch (e) {
-      console.warn(`Error fetching price for ${sym}:`, e);
-      return null;
-    }
-  };
-
-  let price = await trySymbol(symbol);
-  if (price !== null) return price;
-
-  if (spanishSymbols.includes(symbol.toUpperCase())) {
-    price = await trySymbol(symbol + '.MC');
-    if (price !== null) return price;
+  // Probar con el símbolo tal cual (incluyendo .MC si el usuario lo pone)
+  try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const quote = data.quoteResponse?.result?.[0];
+    return quote?.regularMarketPrice || null;
+  } catch (e) {
+    return null;
   }
-
-  return null;
 }
 
 async function fetchCryptoPrice(symbol) {
   const cryptoMap = {
-    'BTC': 'bitcoin',
-    'ETH': 'ethereum',
-    'SOL': 'solana',
-    'ADA': 'cardano',
-    'DOT': 'polkadot',
-    'LINK': 'chainlink',
-    'XRP': 'ripple',
-    'MATIC': 'polygon',
-    'AVAX': 'avalanche-2'
+    'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'ADA': 'cardano',
+    'DOT': 'polkadot', 'LINK': 'chainlink', 'XRP': 'ripple', 'MATIC': 'polygon'
   };
   const id = cryptoMap[symbol.toUpperCase()];
   if (!id) return null;
@@ -70,7 +48,6 @@ async function fetchCryptoPrice(symbol) {
     const data = await res.json();
     return data[id]?.eur || null;
   } catch (e) {
-    console.warn('Error fetching crypto price for', symbol, e);
     return null;
   }
 }
@@ -92,12 +69,15 @@ async function renderTransactions() {
     const gain = currentValue - cost;
     const gainPct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : '0.00';
 
+    // Indicador visual si el precio no se ha actualizado automáticamente
+    const priceStatus = t.currentPrice ? '' : ' <span style="color:#ff9800; font-size:0.9em">(precio de compra)</span>';
+
     html += `
       <div class="transaction-item">
         <div>
           <strong>${t.symbol}</strong> (${t.assetType})<br>
           Cantidad: ${t.quantity} | Compra: ${formatCurrency(t.buyPrice)}<br>
-          Actual: ${currentPrice ? formatCurrency(currentPrice) : '—'} | Valor: ${formatCurrency(currentValue)}<br>
+          Actual: ${formatCurrency(currentPrice)}${priceStatus} | Valor: ${formatCurrency(currentValue)}<br>
           Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
             ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)
           </span>
@@ -150,6 +130,7 @@ async function refreshPrices() {
     if (t.assetType === 'crypto') {
       price = await fetchCryptoPrice(t.symbol);
     } else {
+      // Probar con el símbolo tal cual (el usuario puede poner BBVA.MC si quiere)
       price = await fetchStockPrice(t.symbol);
     }
     if (price !== null) {
@@ -158,30 +139,49 @@ async function refreshPrices() {
     }
   }
   await renderTransactions();
-  alert(`Precios actualizados: ${updated}/${transactions.length} activos.`);
+  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Consejo: Para acciones europeas como BBVA, introduce el símbolo completo (ej. BBVA.MC) al crear la transacción.`);
 }
 
-// --- Editar transacción ---
+// --- Editar transacción (ahora permite editar currentPrice también) ---
 async function editTransaction(id) {
   const tx = await db.transactions.get(id);
   if (!tx) return;
 
-  document.getElementById('symbol').value = tx.symbol;
-  document.getElementById('assetType').value = tx.assetType;
-  document.getElementById('quantity').value = tx.quantity;
-  document.getElementById('buyPrice').value = tx.buyPrice;
-  document.getElementById('buyDate').value = tx.buyDate;
+  // Creamos un formulario de edición más completo
+  const newSymbol = prompt('Símbolo:', tx.symbol);
+  if (newSymbol === null) return; // cancelado
 
-  const btn = document.getElementById('btnAddTransaction');
-  btn.textContent = 'Guardar Cambios';
-  btn.dataset.editId = id;
+  const newQuantity = prompt('Cantidad:', tx.quantity);
+  if (newQuantity === null) return;
 
-  document.getElementById('add-transaction').scrollIntoView({ behavior: 'smooth' });
+  const newBuyPrice = prompt('Precio de compra (€):', tx.buyPrice);
+  if (newBuyPrice === null) return;
+
+  const newCurrentPrice = prompt('Precio actual (€):', tx.currentPrice || tx.buyPrice);
+  if (newCurrentPrice === null) return;
+
+  const newDate = prompt('Fecha de compra (AAAA-MM-DD):', tx.buyDate);
+  if (newDate === null) return;
+
+  // Validación básica
+  if (isNaN(newQuantity) || isNaN(newBuyPrice) || isNaN(newCurrentPrice)) {
+    alert('Valores numéricos inválidos.');
+    return;
+  }
+
+  await db.transactions.update(id, {
+    symbol: newSymbol.trim().toUpperCase(),
+    quantity: parseFloat(newQuantity),
+    buyPrice: parseFloat(newBuyPrice),
+    currentPrice: parseFloat(newCurrentPrice),
+    buyDate: newDate
+  });
+
+  renderTransactions();
 }
 
-// --- Eventos ---
-document.getElementById('btnAddTransaction').addEventListener('click', async (e) => {
-  const btn = e.target;
+// --- Añadir transacción ---
+document.getElementById('btnAddTransaction').addEventListener('click', async () => {
   const symbol = document.getElementById('symbol').value.trim().toUpperCase();
   const assetType = document.getElementById('assetType').value;
   const quantity = parseFloat(document.getElementById('quantity').value);
@@ -189,22 +189,16 @@ document.getElementById('btnAddTransaction').addEventListener('click', async (e)
   const buyDate = document.getElementById('buyDate').value;
 
   if (!symbol || isNaN(quantity) || isNaN(buyPrice) || !buyDate) {
-    alert('Por favor, completa todos los campos correctamente.');
+    alert('Completa todos los campos.');
     return;
   }
 
-  const editId = btn.dataset.editId;
-  if (editId) {
-    await db.transactions.update(parseInt(editId), {
-      symbol, assetType, quantity, buyPrice, buyDate
-    });
-    delete btn.dataset.editId;
-    btn.textContent = 'Añadir Transacción';
-  } else {
-    await db.transactions.add({
-      symbol, assetType, quantity, buyPrice, buyDate, createdAt: new Date().toISOString()
-    });
-  }
+  // Al crear, currentPrice = buyPrice por defecto
+  await db.transactions.add({
+    symbol, assetType, quantity, buyPrice, buyDate,
+    currentPrice: buyPrice,
+    createdAt: new Date().toISOString()
+  });
 
   renderTransactions();
   document.getElementById('symbol').value = '';
@@ -213,6 +207,7 @@ document.getElementById('btnAddTransaction').addEventListener('click', async (e)
   document.getElementById('buyDate').value = today();
 });
 
+// --- Dividendos ---
 document.getElementById('btnAddDividend').addEventListener('click', async () => {
   const symbol = document.getElementById('divSymbol').value.trim().toUpperCase();
   const amount = parseFloat(document.getElementById('divAmount').value);
@@ -233,7 +228,7 @@ document.getElementById('btnAddDividend').addEventListener('click', async () => 
 
 document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
 
-// Delegación de eventos
+// Eventos delegados
 document.addEventListener('click', async (e) => {
   if (e.target.classList.contains('delete-btn')) {
     const id = parseInt(e.target.dataset.id);
@@ -252,15 +247,15 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-// --- Inicializar ---
+// Inicializar
 document.getElementById('buyDate').value = today();
 document.getElementById('divDate').value = today();
 renderTransactions();
 renderDividends();
 
-// --- Service Worker ---
+// Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js');
   });
-        }
+}
