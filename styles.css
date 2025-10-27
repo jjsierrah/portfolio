@@ -107,3 +107,14 @@ section {
   display: flex;
   gap: 6px;
 }
+.manual-update-btn {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+  width: 100%;
+}
