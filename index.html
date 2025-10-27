@@ -12,68 +12,30 @@
 <body>
   <header>
     <h1>JJ Portfolio</h1>
+    <select id="mainMenu">
+      <option value="">— Menú —</option>
+      <option value="add-transaction">Añadir Transacción</option>
+      <option value="view-transactions">Transacciones</option>
+      <option value="add-dividend">Añadir Dividendo</option>
+      <option value="view-dividends">Dividendos</option>
+    </select>
   </header>
 
   <main>
-    <section id="add-transaction">
-      <h2>Añadir Transacción</h2>
-      <div class="form-group">
-        <label>Tipo de activo:</label>
-        <select id="assetType">
-          <option value="stock">Acción</option>
-          <option value="etf">ETF</option>
-          <option value="crypto">Criptomoneda</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Símbolo (ej: AAPL, BTC):</label>
-        <input type="text" id="symbol" placeholder="AAPL, BTC..." required />
-      </div>
-      <div class="form-group">
-        <label>Cantidad:</label>
-        <input type="number" id="quantity" step="any" min="0" required />
-      </div>
-      <div class="form-group">
-        <label>Precio de compra (€):</label>
-        <input type="number" id="buyPrice" step="any" min="0" required />
-      </div>
-      <div class="form-group">
-        <label>Fecha de compra:</label>
-        <input type="date" id="buyDate" required />
-      </div>
-      <button id="btnAddTransaction">Añadir Transacción</button>
-    </section>
-
-    <section id="add-dividend">
-      <h2>Añadir Dividendo</h2>
-      <div class="form-group">
-        <label>Símbolo:</label>
-        <input type="text" id="divSymbol" placeholder="AAPL..." required />
-      </div>
-      <div class="form-group">
-        <label>Cantidad recibida (€):</label>
-        <input type="number" id="divAmount" step="any" min="0" required />
-      </div>
-      <div class="form-group">
-        <label>Fecha:</label>
-        <input type="date" id="divDate" required />
-      </div>
-      <button id="btnAddDividend">Añadir Dividendo</button>
-    </section>
-
-    <section id="portfolio">
-      <h2>Transacciones</h2>
-      <button id="btnRefreshPrices">Actualizar Precios</button>
-      <div id="transactionsList"></div>
-    </section>
-
-    <section id="dividends">
-      <h2>Dividendos</h2>
-      <div id="dividendsList"></div>
+    <!-- RESUMEN PRINCIPAL -->
+    <section id="portfolio-summary">
+      <h2>Resumen del Portfolio</h2>
+      <div id="summary-totals"></div>
+      <div id="summary-by-type"></div>
     </section>
   </main>
+
+  <!-- MODAL CONTAINERS -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div id="modalContent" class="modal-content"></div>
+  </div>
 
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
   <script src="app.js"></script>
 </body>
-          </html>
+</html>
