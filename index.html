@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1a73e8" />
-  <link rel="icon" href="image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💼</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
 </head>
 <body>
   <header>
@@ -15,10 +15,10 @@
   </header>
 
   <main>
-    <section id="add-investment">
-      <h2>Añadir Inversión</h2>
+    <section id="add-transaction">
+      <h2>Añadir Transacción</h2>
       <div class="form-group">
-        <label>Tipo:</label>
+        <label>Tipo de activo:</label>
         <select id="assetType">
           <option value="stock">Acción</option>
           <option value="etf">ETF</option>
@@ -34,14 +34,14 @@
         <input type="number" id="quantity" step="any" min="0" required />
       </div>
       <div class="form-group">
-        <label>Precio de compra:</label>
+        <label>Precio de compra (€):</label>
         <input type="number" id="buyPrice" step="any" min="0" required />
       </div>
       <div class="form-group">
         <label>Fecha de compra:</label>
         <input type="date" id="buyDate" required />
       </div>
-      <button id="btnAddInvestment">Añadir Inversión</button>
+      <button id="btnAddTransaction">Añadir Transacción</button>
     </section>
 
     <section id="add-dividend">
@@ -51,7 +51,7 @@
         <input type="text" id="divSymbol" placeholder="AAPL..." required />
       </div>
       <div class="form-group">
-        <label>Cantidad recibida:</label>
+        <label>Cantidad recibida (€):</label>
         <input type="number" id="divAmount" step="any" min="0" required />
       </div>
       <div class="form-group">
@@ -62,9 +62,9 @@
     </section>
 
     <section id="portfolio">
-      <h2>Portfolio</h2>
+      <h2>Transacciones</h2>
       <button id="btnRefreshPrices">Actualizar Precios</button>
-      <div id="portfolioList"></div>
+      <div id="transactionsList"></div>
     </section>
 
     <section id="dividends">
@@ -76,4 +76,4 @@
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
   <script src="app.js"></script>
 </body>
-        </html>
+          </html>
