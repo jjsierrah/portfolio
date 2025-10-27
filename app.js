@@ -1,13 +1,8 @@
-// --- IndexedDB ---
 const db = new Dexie('JJPortfolioDB');
 db.version(2).stores({
   transactions: '++id, symbol, assetType, quantity, buyPrice, buyDate, currentPrice',
   dividends: '++id, symbol, amount, perShare, date'
 });
-
-// --- Gráficos ---
-let chartByType = null;
-let chartByAsset = null;
 
 function today() {
   const d = new Date();
@@ -31,7 +26,6 @@ function formatPercent(value) {
   }).format(value);
 }
 
-// --- APIs ---
 async function fetchStockPrice(symbol) {
   try {
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
@@ -64,17 +58,14 @@ async function fetchCryptoPrice(symbol) {
   }
 }
 
-// --- Render principal con gráficos ---
 async function renderPortfolioSummary() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
     document.getElementById('summary-totals').innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
     document.getElementById('summary-by-type').innerHTML = '';
-    destroyCharts();
     return;
   }
 
-  // Agrupar por símbolo y tipo
   const assets = {};
   let totalCost = 0;
   let totalValue = 0;
@@ -102,7 +93,6 @@ async function renderPortfolioSummary() {
   const totalGain = totalValue - totalCost;
   const totalGainPct = totalCost > 0 ? totalGain / totalCost : 0;
 
-  // Totales
   const totalsHtml = `
     <div class="summary-card">
       <div><strong>Total invertido:</strong> ${formatCurrency(totalCost)}</div>
@@ -116,7 +106,6 @@ async function renderPortfolioSummary() {
   `;
   document.getElementById('summary-totals').innerHTML = totalsHtml;
 
-  // Por tipo
   const groups = { stock: [], etf: [], crypto: [] };
   Object.values(assets).forEach(asset => {
     groups[asset.assetType].push(asset);
@@ -143,117 +132,8 @@ async function renderPortfolioSummary() {
     }
   }
   document.getElementById('summary-by-type').innerHTML = groupsHtml;
-
-  // --- Actualizar gráficos ---
-  updateChartByType(groups);
-  updateChartByAsset(assets);
 }
 
-function destroyCharts() {
-  if (chartByType) {
-    chartByType.destroy();
-    chartByType = null;
-  }
-  if (chartByAsset) {
-    chartByAsset.destroy();
-    chartByAsset = null;
-  }
-}
-
-function updateChartByType(groups) {
-  const ctx = document.getElementById('chartByType').getContext('2d');
-  
-  const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' };
-  const colors = { stock: '#4285F4', etf: '#34A853', crypto: '#FBBC05' };
-  
-  const data = [];
-  const labels = [];
-  const backgroundColors = [];
-
-  for (const [type, list] of Object.entries(groups)) {
-    if (list.length === 0) continue;
-    const total = list.reduce((sum, a) => sum + a.currentValue, 0);
-    labels.push(typeNames[type]);
-    data.push(total);
-    backgroundColors.push(colors[type]);
-  }
-
-  if (chartByType) chartByType.destroy();
-  chartByType = new Chart(ctx, {
-    type: 'doughnut',
-     {
-      labels,
-      datasets: [{
-        data,
-        backgroundColor: backgroundColors,
-        borderWidth: 2,
-        borderColor: '#fff'
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom' },
-        tooltip: {
-          callbacks: {
-            label: (context) => `${context.label}: ${formatCurrency(context.parsed)}`
-          }
-        }
-      }
-    }
-  });
-}
-
-function updateChartByAsset(assets) {
-  const ctx = document.getElementById('chartByAsset').getContext('2d');
-
-  // Ordenar por valor actual y tomar top 5
-  const sorted = Object.values(assets)
-    .sort((a, b) => b.currentValue - a.currentValue)
-    .slice(0, 5);
-
-  const labels = sorted.map(a => a.symbol);
-  const data = sorted.map(a => a.currentValue);
-  const backgroundColors = [
-    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'
-  ].slice(0, data.length);
-
-  if (chartByAsset) chartByAsset.destroy();
-  chartByAsset = new Chart(ctx, {
-    type: 'bar',
-     {
-      labels,
-      datasets: [{
-        label: 'Valor actual (€)',
-        data,
-        backgroundColor: backgroundColors,
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => `${formatCurrency(context.parsed.y)}`
-          }
-        }
-      },
-      scales: {
-        y: {
-          ticks: {
-            callback: (value) => formatCurrency(value).replace(/[^0-9,€]/g, '')
-          }
-        }
-      }
-    }
-  });
-}
-
-// --- Modales ---
 function openModal(title, content) {
   document.getElementById('modalContent').innerHTML = `
     <div class="modal-header">
@@ -263,18 +143,16 @@ function openModal(title, content) {
     ${content}
   `;
   document.getElementById('modalOverlay').style.display = 'flex';
-
-  document.querySelector('.close-modal').onclick = closeModal;
+  document.querySelector('.close-modal').onclick = () => {
+    document.getElementById('modalOverlay').style.display = 'none';
+  };
   document.getElementById('modalOverlay').onclick = (e) => {
-    if (e.target === document.getElementById('modalOverlay')) closeModal();
+    if (e.target.id === 'modalOverlay') {
+      document.getElementById('modalOverlay').style.display = 'none';
+    }
   };
 }
 
-function closeModal() {
-  document.getElementById('modalOverlay').style.display = 'none';
-}
-
-// --- Formulario: Añadir Transacción ---
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -286,7 +164,7 @@ function showAddTransactionForm() {
       </select>
     </div>
     <div class="form-group">
-      <label>Símbolo (ej: AAPL, BTC):</label>
+      <label>Símbolo:</label>
       <input type="text" id="symbol" placeholder="AAPL, BTC..." required />
     </div>
     <div class="form-group">
@@ -313,31 +191,29 @@ function showAddTransactionForm() {
     const buyDate = document.getElementById('buyDate').value;
 
     if (!symbol || isNaN(quantity) || isNaN(buyPrice)) {
-      alert('Completa todos los campos correctamente.');
+      alert('Completa todos los campos.');
       return;
     }
 
     await db.transactions.add({
       symbol, assetType, quantity, buyPrice, buyDate,
-      currentPrice: buyPrice,
-      createdAt: new Date().toISOString()
+      currentPrice: buyPrice
     });
 
-    closeModal();
+    document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
 }
 
-// --- Ver Transacciones (con edición y eliminación) ---
 async function showTransactionsList() {
-  const transactions = await db.transactions.toArray();
-  if (transactions.length === 0) {
+  const txs = await db.transactions.toArray();
+  if (txs.length === 0) {
     openModal('Transacciones', '<p>No hay transacciones.</p>');
     return;
   }
 
-  let html = '<h3>Todas las transacciones</h3>';
-  for (const t of transactions) {
+  let html = '<h3>Transacciones</h3>';
+  for (const t of txs) {
     const currentPrice = t.currentPrice || t.buyPrice;
     const currentValue = t.quantity * currentPrice;
     const cost = t.quantity * t.buyPrice;
@@ -347,42 +223,37 @@ async function showTransactionsList() {
     html += `
       <div class="asset-item">
         <strong>${t.symbol}</strong> (${t.assetType})<br>
-        ${t.quantity} @ ${formatCurrency(t.buyPrice)} (compra: ${t.buyDate})<br>
-        Actual: ${formatCurrency(currentPrice)} → Valor: ${formatCurrency(currentValue)}<br>
-        Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
-          ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)
-        </span>
+        ${t.quantity} @ ${formatCurrency(t.buyPrice)} (${t.buyDate})<br>
+        Actual: ${formatCurrency(currentPrice)} → ${formatCurrency(currentValue)}<br>
+        Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)</span>
         <div style="margin-top:8px;">
-          <button class="edit-btn" data-id="${t.id}" data-type="transaction">Editar</button>
-          <button class="delete-btn" data-id="${t.id}" data-type="transaction">Eliminar</button>
+          <button class="edit-btn" data-id="${t.id}">Editar</button>
+          <button class="delete-btn" data-id="${t.id}">Eliminar</button>
         </div>
       </div>
     `;
   }
   openModal('Transacciones', html);
 
-  // Delegación de eventos dentro del modal
-  const modalContent = document.getElementById('modalContent');
-  modalContent.onclick = async (e) => {
-    if (e.target.classList.contains('delete-btn') && e.target.dataset.type === 'transaction') {
-      if (!confirm('¿Eliminar esta transacción?')) return;
+  document.getElementById('modalContent').onclick = async (e) => {
+    if (e.target.classList.contains('delete-btn')) {
+      if (!confirm('¿Eliminar?')) return;
       const id = parseInt(e.target.dataset.id);
       await db.transactions.delete(id);
-      showTransactionsList(); // recargar modal
+      showTransactionsList();
     }
-
-    if (e.target.classList.contains('edit-btn') && e.target.dataset.type === 'transaction') {
+    if (e.target.classList.contains('edit-btn')) {
       const id = parseInt(e.target.dataset.id);
       const tx = await db.transactions.get(id);
       if (!tx) return;
 
       const form = `
         <div class="form-group">
-          <label>Tipo de activo:</label>
+          <label>Tipo:</label>
           <select id="editAssetType">
             <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
             <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
-            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Criptomoneda</option>
+            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
           </select>
         </div>
         <div class="form-group">
@@ -391,25 +262,25 @@ async function showTransactionsList() {
         </div>
         <div class="form-group">
           <label>Cantidad:</label>
-          <input type="number" id="editQuantity" step="any" min="0" value="${tx.quantity}" required />
+          <input type="number" id="editQuantity" value="${tx.quantity}" required />
         </div>
         <div class="form-group">
-          <label>Precio de compra (€):</label>
-          <input type="number" id="editBuyPrice" step="any" min="0" value="${tx.buyPrice}" required />
+          <label>Precio compra (€):</label>
+          <input type="number" id="editBuyPrice" value="${tx.buyPrice}" required />
         </div>
         <div class="form-group">
           <label>Precio actual (€):</label>
-          <input type="number" id="editCurrentPrice" step="any" min="0" value="${tx.currentPrice || tx.buyPrice}" required />
+          <input type="number" id="editCurrentPrice" value="${tx.currentPrice || tx.buyPrice}" required />
         </div>
         <div class="form-group">
-          <label>Fecha de compra:</label>
+          <label>Fecha:</label>
           <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
         </div>
-        <button id="btnUpdateTransaction">Guardar Cambios</button>
+        <button id="btnUpdateTx">Guardar</button>
       `;
       openModal('Editar Transacción', form);
 
-      document.getElementById('btnUpdateTransaction').onclick = async () => {
+      document.getElementById('btnUpdateTx').onclick = async () => {
         const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
         const assetType = document.getElementById('editAssetType').value;
         const quantity = parseFloat(document.getElementById('editQuantity').value);
@@ -418,25 +289,22 @@ async function showTransactionsList() {
         const buyDate = document.getElementById('editBuyDate').value;
 
         if (!symbol || isNaN(quantity) || isNaN(buyPrice) || isNaN(currentPrice)) {
-          alert('Completa todos los campos correctamente.');
+          alert('Datos inválidos.');
           return;
         }
 
-        await db.transactions.update(id, {
-          symbol, assetType, quantity, buyPrice, currentPrice, buyDate
-        });
-        closeModal();
-        showTransactionsList(); // recargar
+        await db.transactions.update(id, { symbol, assetType, quantity, buyPrice, currentPrice, buyDate });
+        document.getElementById('modalOverlay').style.display = 'none';
+        showTransactionsList();
       };
     }
   };
 }
 
-// --- Añadir Dividendo ---
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
-    alert('Primero debes añadir al menos una transacción.');
+    alert('Añade una transacción primero.');
     return;
   }
 
@@ -444,12 +312,10 @@ async function showAddDividendForm() {
   const form = `
     <div class="form-group">
       <label>Símbolo:</label>
-      <select id="divSymbol">
-        ${options}
-      </select>
+      <select id="divSymbol">${options}</select>
     </div>
     <div class="form-group">
-      <label>Cantidad de títulos:</label>
+      <label>Títulos:</label>
       <input type="number" id="divQuantity" readonly />
     </div>
     <div class="form-group">
@@ -457,105 +323,96 @@ async function showAddDividendForm() {
       <input type="number" id="divPerShare" step="any" min="0" placeholder="0.25" />
     </div>
     <div class="form-group">
-      <label>Importe total (€):</label>
+      <label>Total (€):</label>
       <input type="text" id="divTotal" readonly />
     </div>
     <div class="form-group">
       <label>Fecha:</label>
       <input type="date" id="divDate" value="${today()}" />
     </div>
-    <button id="btnSaveDividend">Añadir Dividendo</button>
+    <button id="btnSaveDiv">Añadir Dividendo</button>
   `;
   openModal('Añadir Dividendo', form);
 
   const symbolSelect = document.getElementById('divSymbol');
-  const quantityInput = document.getElementById('divQuantity');
+  const qtyInput = document.getElementById('divQuantity');
   const perShareInput = document.getElementById('divPerShare');
   const totalInput = document.getElementById('divTotal');
 
-  async function updateQuantity() {
-    const symbol = symbolSelect.value;
-    const txs = await db.transactions.where('symbol').equals(symbol).toArray();
-    const totalQty = txs.reduce((sum, t) => sum + t.quantity, 0);
-    quantityInput.value = totalQty;
-    updateTotal();
+  async function updateQty() {
+    const sym = symbolSelect.value;
+    const txs = await db.transactions.where('symbol').equals(sym).toArray();
+    const total = txs.reduce((sum, t) => sum + t.quantity, 0);
+    qtyInput.value = total;
+    totalInput.value = formatCurrency(total * (parseFloat(perShareInput.value) || 0));
   }
 
-  function updateTotal() {
-    const qty = parseFloat(quantityInput.value) || 0;
-    const perShare = parseFloat(perShareInput.value) || 0;
-    totalInput.value = formatCurrency(qty * perShare);
-  }
+  symbolSelect.onchange = updateQty;
+  perShareInput.oninput = () => {
+    totalInput.value = formatCurrency((parseFloat(qtyInput.value) || 0) * (parseFloat(perShareInput.value) || 0));
+  };
+  updateQty();
 
-  symbolSelect.onchange = updateQuantity;
-  perShareInput.oninput = updateTotal;
-  await updateQuantity(); // inicial
-
-  document.getElementById('btnSaveDividend').onclick = async () => {
-    const symbol = symbolSelect.value;
-    const quantity = parseFloat(quantityInput.value);
+  document.getElementById('btnSaveDiv').onclick = async () => {
+    const sym = symbolSelect.value;
+    const qty = parseFloat(qtyInput.value);
     const perShare = parseFloat(perShareInput.value);
-    const total = quantity * perShare;
+    const total = qty * perShare;
     const date = document.getElementById('divDate').value;
 
     if (isNaN(perShare) || perShare <= 0) {
-      alert('Introduce un dividendo por acción válido.');
+      alert('Dividendo por acción inválido.');
       return;
     }
 
-    await db.dividends.add({ symbol, amount: total, perShare, date });
-    closeModal();
+    await db.dividends.add({ symbol: sym, amount: total, perShare, date });
+    document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
 }
 
-// --- Ver Dividendos (con eliminación) ---
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
-    openModal('Dividendos', '<p>No hay dividendos registrados.</p>');
+    openModal('Dividendos', '<p>No hay dividendos.</p>');
     return;
   }
 
-  let html = '<h3>Dividendos recibidos</h3>';
-  let totalDiv = 0;
+  let html = '<h3>Dividendos</h3>';
+  let total = 0;
   for (const d of divs) {
-    totalDiv += d.amount;
+    total += d.amount;
     html += `
       <div class="asset-item">
-        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} 
-        (${formatCurrency(d.perShare)} por acción) el ${d.date}
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${d.date}
         <div style="margin-top:8px;">
-          <button class="delete-btn" data-id="${d.id}" data-type="dividend">Eliminar</button>
+          <button class="delete-btn" data-id="${d.id}">Eliminar</button>
         </div>
       </div>
     `;
   }
-  html += `<div class="summary-card"><strong>Total dividendos:</strong> ${formatCurrency(totalDiv)}</div>`;
+  html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
   openModal('Dividendos', html);
 
-  // Delegación de eventos para dividendos
-  const modalContent = document.getElementById('modalContent');
-  modalContent.onclick = async (e) => {
-    if (e.target.classList.contains('delete-btn') && e.target.dataset.type === 'dividend') {
-      if (!confirm('¿Eliminar este dividendo?')) return;
+  document.getElementById('modalContent').onclick = async (e) => {
+    if (e.target.classList.contains('delete-btn')) {
+      if (!confirm('¿Eliminar dividendo?')) return;
       const id = parseInt(e.target.dataset.id);
       await db.dividends.delete(id);
-      showDividendsList(); // recargar
+      showDividendsList();
     }
   };
 }
 
-// --- Actualizar precios ---
 async function refreshPrices() {
-  const transactions = await db.transactions.toArray();
-  if (transactions.length === 0) {
-    alert('No hay transacciones para actualizar.');
+  const txs = await db.transactions.toArray();
+  if (txs.length === 0) {
+    alert('No hay transacciones.');
     return;
   }
 
   let updated = 0;
-  for (const t of transactions) {
+  for (const t of txs) {
     let price = null;
     if (t.assetType === 'crypto') {
       price = await fetchCryptoPrice(t.symbol);
@@ -568,32 +425,24 @@ async function refreshPrices() {
     }
   }
   renderPortfolioSummary();
-  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC).`);
+  alert(`Actualizados: ${updated}/${txs.length}`);
 }
 
-// --- Inicialización segura ---
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  const refreshBtn = document.getElementById('btnRefreshPrices');
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', refreshPrices);
-  }
+  document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
 
-  const mainMenu = document.getElementById('mainMenu');
-  if (mainMenu) {
-    mainMenu.addEventListener('change', function () {
-      const action = this.value;
-      this.selectedIndex = 0;
-
-      switch (action) {
-        case 'add-transaction': showAddTransactionForm(); break;
-        case 'view-transactions': showTransactionsList(); break;
-        case 'add-dividend': showAddDividendForm(); break;
-        case 'view-dividends': showDividendsList(); break;
-      }
-    });
-  }
+  document.getElementById('mainMenu').addEventListener('change', function () {
+    const action = this.value;
+    this.selectedIndex = 0;
+    switch (action) {
+      case 'add-transaction': showAddTransactionForm(); break;
+      case 'view-transactions': showTransactionsList(); break;
+      case 'add-dividend': showAddDividendForm(); break;
+      case 'view-dividends': showDividendsList(); break;
+    }
+  });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
