@@ -505,7 +505,7 @@ async function showAddDividendForm() {
 
     await db.dividends.add({ symbol, amount: total, perShare, date });
     closeModal();
-    renderPortfolioSummary(); // en caso de que el dividendo afecte a métricas futuras
+    renderPortfolioSummary();
   };
 }
 
@@ -571,26 +571,31 @@ async function refreshPrices() {
   alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC).`);
 }
 
-// --- Menú principal ---
-document.getElementById('mainMenu').onchange = function () {
-  const action = this.value;
-  this.selectedIndex = 0; // reset
+// --- Inicialización segura ---
+document.addEventListener('DOMContentLoaded', () => {
+  renderPortfolioSummary();
 
-  switch (action) {
-    case 'add-transaction': showAddTransactionForm(); break;
-    case 'view-transactions': showTransactionsList(); break;
-    case 'add-dividend': showAddDividendForm(); break;
-    case 'view-dividends': showDividendsList(); break;
+  const refreshBtn = document.getElementById('btnRefreshPrices');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', refreshPrices);
   }
-};
 
-// --- Inicializar ---
-renderPortfolioSummary();
-document.getElementById('btnRefreshPrices').onclick = refreshPrices;
+  const mainMenu = document.getElementById('mainMenu');
+  if (mainMenu) {
+    mainMenu.addEventListener('change', function () {
+      const action = this.value;
+      this.selectedIndex = 0;
 
-// Service Worker
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+      switch (action) {
+        case 'add-transaction': showAddTransactionForm(); break;
+        case 'view-transactions': showTransactionsList(); break;
+        case 'add-dividend': showAddDividendForm(); break;
+        case 'view-dividends': showDividendsList(); break;
+      }
+    });
+  }
+
+  if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
-  });
-}
+  }
+});
