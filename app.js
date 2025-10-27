@@ -5,6 +5,10 @@ db.version(2).stores({
   dividends: '++id, symbol, amount, perShare, date'
 });
 
+// --- Gráficos ---
+let chartByType = null;
+let chartByAsset = null;
+
 function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
@@ -60,12 +64,13 @@ async function fetchCryptoPrice(symbol) {
   }
 }
 
-// --- Render principal ---
+// --- Render principal con gráficos ---
 async function renderPortfolioSummary() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
     document.getElementById('summary-totals').innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
     document.getElementById('summary-by-type').innerHTML = '';
+    destroyCharts();
     return;
   }
 
@@ -138,6 +143,114 @@ async function renderPortfolioSummary() {
     }
   }
   document.getElementById('summary-by-type').innerHTML = groupsHtml;
+
+  // --- Actualizar gráficos ---
+  updateChartByType(groups);
+  updateChartByAsset(assets);
+}
+
+function destroyCharts() {
+  if (chartByType) {
+    chartByType.destroy();
+    chartByType = null;
+  }
+  if (chartByAsset) {
+    chartByAsset.destroy();
+    chartByAsset = null;
+  }
+}
+
+function updateChartByType(groups) {
+  const ctx = document.getElementById('chartByType').getContext('2d');
+  
+  const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' };
+  const colors = { stock: '#4285F4', etf: '#34A853', crypto: '#FBBC05' };
+  
+  const data = [];
+  const labels = [];
+  const backgroundColors = [];
+
+  for (const [type, list] of Object.entries(groups)) {
+    if (list.length === 0) continue;
+    const total = list.reduce((sum, a) => sum + a.currentValue, 0);
+    labels.push(typeNames[type]);
+    data.push(total);
+    backgroundColors.push(colors[type]);
+  }
+
+  if (chartByType) chartByType.destroy();
+  chartByType = new Chart(ctx, {
+    type: 'doughnut',
+     {
+      labels,
+      datasets: [{
+        data,
+        backgroundColor: backgroundColors,
+        borderWidth: 2,
+        borderColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (context) => `${context.label}: ${formatCurrency(context.parsed)}`
+          }
+        }
+      }
+    }
+  });
+}
+
+function updateChartByAsset(assets) {
+  const ctx = document.getElementById('chartByAsset').getContext('2d');
+
+  // Ordenar por valor actual y tomar top 5
+  const sorted = Object.values(assets)
+    .sort((a, b) => b.currentValue - a.currentValue)
+    .slice(0, 5);
+
+  const labels = sorted.map(a => a.symbol);
+  const data = sorted.map(a => a.currentValue);
+  const backgroundColors = [
+    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'
+  ].slice(0, data.length);
+
+  if (chartByAsset) chartByAsset.destroy();
+  chartByAsset = new Chart(ctx, {
+    type: 'bar',
+     {
+      labels,
+      datasets: [{
+        label: 'Valor actual (€)',
+        data,
+        backgroundColor: backgroundColors,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (context) => `${formatCurrency(context.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: (value) => formatCurrency(value).replace(/[^0-9,€]/g, '')
+          }
+        }
+      }
+    }
+  });
 }
 
 // --- Modales ---
@@ -215,7 +328,7 @@ function showAddTransactionForm() {
   };
 }
 
-// --- Ver Transacciones ---
+// --- Ver Transacciones (con edición y eliminación) ---
 async function showTransactionsList() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -239,10 +352,84 @@ async function showTransactionsList() {
         Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
           ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)
         </span>
+        <div style="margin-top:8px;">
+          <button class="edit-btn" data-id="${t.id}" data-type="transaction">Editar</button>
+          <button class="delete-btn" data-id="${t.id}" data-type="transaction">Eliminar</button>
+        </div>
       </div>
     `;
   }
   openModal('Transacciones', html);
+
+  // Delegación de eventos dentro del modal
+  const modalContent = document.getElementById('modalContent');
+  modalContent.onclick = async (e) => {
+    if (e.target.classList.contains('delete-btn') && e.target.dataset.type === 'transaction') {
+      if (!confirm('¿Eliminar esta transacción?')) return;
+      const id = parseInt(e.target.dataset.id);
+      await db.transactions.delete(id);
+      showTransactionsList(); // recargar modal
+    }
+
+    if (e.target.classList.contains('edit-btn') && e.target.dataset.type === 'transaction') {
+      const id = parseInt(e.target.dataset.id);
+      const tx = await db.transactions.get(id);
+      if (!tx) return;
+
+      const form = `
+        <div class="form-group">
+          <label>Tipo de activo:</label>
+          <select id="editAssetType">
+            <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
+            <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
+            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Criptomoneda</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <input type="text" id="editSymbol" value="${tx.symbol}" required />
+        </div>
+        <div class="form-group">
+          <label>Cantidad:</label>
+          <input type="number" id="editQuantity" step="any" min="0" value="${tx.quantity}" required />
+        </div>
+        <div class="form-group">
+          <label>Precio de compra (€):</label>
+          <input type="number" id="editBuyPrice" step="any" min="0" value="${tx.buyPrice}" required />
+        </div>
+        <div class="form-group">
+          <label>Precio actual (€):</label>
+          <input type="number" id="editCurrentPrice" step="any" min="0" value="${tx.currentPrice || tx.buyPrice}" required />
+        </div>
+        <div class="form-group">
+          <label>Fecha de compra:</label>
+          <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
+        </div>
+        <button id="btnUpdateTransaction">Guardar Cambios</button>
+      `;
+      openModal('Editar Transacción', form);
+
+      document.getElementById('btnUpdateTransaction').onclick = async () => {
+        const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
+        const assetType = document.getElementById('editAssetType').value;
+        const quantity = parseFloat(document.getElementById('editQuantity').value);
+        const buyPrice = parseFloat(document.getElementById('editBuyPrice').value);
+        const currentPrice = parseFloat(document.getElementById('editCurrentPrice').value);
+        const buyDate = document.getElementById('editBuyDate').value;
+
+        if (!symbol || isNaN(quantity) || isNaN(buyPrice) || isNaN(currentPrice)) {
+          alert('Completa todos los campos correctamente.');
+          return;
+        }
+
+        await db.transactions.update(id, {
+          symbol, assetType, quantity, buyPrice, currentPrice, buyDate
+        });
+        closeModal();
+        showTransactionsList(); // recargar
+      };
+    }
+  };
 }
 
 // --- Añadir Dividendo ---
@@ -318,10 +505,11 @@ async function showAddDividendForm() {
 
     await db.dividends.add({ symbol, amount: total, perShare, date });
     closeModal();
+    renderPortfolioSummary(); // en caso de que el dividendo afecte a métricas futuras
   };
 }
 
-// --- Ver Dividendos ---
+// --- Ver Dividendos (con eliminación) ---
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -337,16 +525,35 @@ async function showDividendsList() {
       <div class="asset-item">
         <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} 
         (${formatCurrency(d.perShare)} por acción) el ${d.date}
+        <div style="margin-top:8px;">
+          <button class="delete-btn" data-id="${d.id}" data-type="dividend">Eliminar</button>
+        </div>
       </div>
     `;
   }
   html += `<div class="summary-card"><strong>Total dividendos:</strong> ${formatCurrency(totalDiv)}</div>`;
   openModal('Dividendos', html);
+
+  // Delegación de eventos para dividendos
+  const modalContent = document.getElementById('modalContent');
+  modalContent.onclick = async (e) => {
+    if (e.target.classList.contains('delete-btn') && e.target.dataset.type === 'dividend') {
+      if (!confirm('¿Eliminar este dividendo?')) return;
+      const id = parseInt(e.target.dataset.id);
+      await db.dividends.delete(id);
+      showDividendsList(); // recargar
+    }
+  };
 }
 
-// --- Actualizar precios (accesible desde menú en el futuro o botón en resumen) ---
+// --- Actualizar precios ---
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
+  if (transactions.length === 0) {
+    alert('No hay transacciones para actualizar.');
+    return;
+  }
+
   let updated = 0;
   for (const t of transactions) {
     let price = null;
@@ -361,7 +568,7 @@ async function refreshPrices() {
     }
   }
   renderPortfolioSummary();
-  alert(`Precios actualizados: ${updated}/${transactions.length}`);
+  alert(`Precios actualizados: ${updated}/${transactions.length} activos.\n\n💡 Para acciones europeas (BBVA, SAN...), usa el ticker completo (ej. BBVA.MC).`);
 }
 
 // --- Menú principal ---
@@ -379,6 +586,7 @@ document.getElementById('mainMenu').onchange = function () {
 
 // --- Inicializar ---
 renderPortfolioSummary();
+document.getElementById('btnRefreshPrices').onclick = refreshPrices;
 
 // Service Worker
 if ('serviceWorker' in navigator) {
