@@ -144,6 +144,21 @@ button:hover {
   opacity: 0.9;
 }
 
+.refresh-btn {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.refresh-btn:hover {
+  opacity: 0.9;
+}
+
 .delete-btn, .edit-btn {
   background: #f44336;
   color: white;
@@ -157,4 +172,22 @@ button:hover {
 
 .edit-btn {
   background: #4CAF50;
+}
+
+#charts {
+  margin-top: 20px;
+}
+
+.chart-container {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  height: 250px;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 200px !important;
 }
