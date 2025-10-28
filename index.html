@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1a73e8" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+  <link rel="icon" href="image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
 </head>
 <body>
   <header>
@@ -18,6 +18,7 @@
       <option value="view-transactions">Transacciones</option>
       <option value="add-dividend">Añadir Dividendo</option>
       <option value="view-dividends">Dividendos</option>
+      <option value="import-export">Exportar / Importar</option>
     </select>
   </header>
 
@@ -28,13 +29,33 @@
       <div id="summary-totals"></div>
       <div id="summary-by-type"></div>
     </section>
+
+    <!-- Gráficos (solo si Chart.js carga) -->
+    <section id="charts" style="display:none;">
+      <h2>Análisis Visual</h2>
+      <div class="chart-container">
+        <canvas id="chartByType"></canvas>
+      </div>
+      <div class="chart-container">
+        <canvas id="chartByAsset"></canvas>
+      </div>
+    </section>
   </main>
 
   <div id="modalOverlay" class="modal-overlay">
     <div id="modalContent" class="modal-content"></div>
   </div>
 
+  <!-- Cargar Chart.js asíncronamente -->
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+  <script>
+    // Cargar Chart.js sin bloquear
+    let chartJsLoaded = false;
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+    script.onload = () => { chartJsLoaded = true; };
+    document.head.appendChild(script);
+  </script>
   <script src="app.js"></script>
 </body>
 </html>
