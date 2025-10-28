@@ -26,17 +26,54 @@ function formatPercent(value) {
   }).format(value);
 }
 
+// --- APIs mejoradas para mercados europeos ---
 async function fetchStockPrice(symbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const quote = data.quoteResponse?.result?.[0];
-    return quote?.regularMarketPrice || null;
-  } catch {
-    return null;
+  // Mapa de símbolos comunes a sus tickers completos en Yahoo Finance
+  const symbolMap = {
+    // España (.MC)
+    'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
+    'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
+    'FER': 'FER.MC', 'CABK': 'CABK.MC', 'MAP': 'MAP.MC',
+    // Francia (.PA)
+    'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA', 'AI': 'AI.PA',
+    'DG': 'DG.PA', 'RI': 'RI.PA', 'FP': 'FP.PA',
+    // Alemania (.DE)
+    'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE', 'BMW': 'BMW.DE',
+    'DAI': 'DAI.DE', 'SIE': 'SIE.DE',
+    // Italia (.MI)
+    'ENI': 'ENI.MI', 'ISP': 'ISP.MI', 'UCG': 'UCG.MI', 'STM': 'STM.MI',
+    // Países Bajos (.AS)
+    'ASML': 'ASML.AS', 'RDSA': 'RDSA.AS',
+    // Suiza (.SW)
+    'NESN': 'NESN.SW', 'ROG': 'ROG.SW'
+  };
+
+  const trySymbol = async (sym) => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const quote = data.quoteResponse?.result?.[0];
+      return quote?.regularMarketPrice || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. Probar con el símbolo tal cual (por si ya incluye .MC, .PA, etc.)
+  let price = await trySymbol(symbol);
+  if (price !== null) return price;
+
+  // 2. Si no, probar con la versión mapeada
+  const mapped = symbolMap[symbol.toUpperCase()];
+  if (mapped) {
+    price = await trySymbol(mapped);
+    if (price !== null) return price;
   }
+
+  // 3. Si sigue sin funcionar, devolver null
+  return null;
 }
 
 async function fetchCryptoPrice(symbol) {
