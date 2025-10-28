@@ -219,3 +219,32 @@ button:hover {
   margin-right: 8px;
   margin-bottom: 8px;
 }
+/* Menú con iconos */
+.menu-icons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.menu-icons button {
+  background-color: #f5f7fa;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px 10px;
+  font-size: 0.95rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.menu-icons button:hover {
+  background-color: #e8f0fe;
+  border-color: #1a73e8;
+  transform: translateY(-2px);
+}
