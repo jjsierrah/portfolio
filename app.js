@@ -1,7 +1,8 @@
 const db = new Dexie('JJPortfolioDB');
-db.version(3).stores({
+db.version(4).stores({
   transactions: '++id, symbol, name, assetType, quantity, buyPrice, commission, type, buyDate',
-  dividends: '++id, symbol, amount, perShare, date'
+  dividends: '++id, symbol, amount, perShare, date',
+  prices: 'symbol' // Almacenar precios actuales persistentemente
 });
 
 function today() {
@@ -25,9 +26,6 @@ function formatPercent(value) {
     maximumFractionDigits: 2
   }).format(value);
 }
-
-// Almacenar precios actuales globalmente
-const globalCurrentPrices = {};
 
 // --- Notificación visual (toast) ---
 function showToast(message) {
@@ -97,11 +95,9 @@ async function fetchStockPrice(symbol) {
     }
   };
 
-  // Probar tal cual
   let price = await trySymbol(symbol);
   if (price !== null) return price;
 
-  // Probar con extensión de mercado
   const mapped = symbolMap[symbol.toUpperCase()];
   if (mapped) {
     price = await trySymbol(mapped);
@@ -130,6 +126,17 @@ async function fetchCryptoPrice(symbol) {
   }
 }
 
+// Obtener precio actual (de BD o fallback)
+async function getCurrentPrice(symbol) {
+  const saved = await db.prices.get(symbol);
+  return saved ? saved.price : null;
+}
+
+// Guardar precio actual en BD
+async function saveCurrentPrice(symbol, price) {
+  await db.prices.put({ symbol, price });
+}
+
 async function renderPortfolioSummary() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -139,16 +146,20 @@ async function renderPortfolioSummary() {
   }
 
   const symbols = [...new Set(transactions.map(t => t.symbol))];
-  for (const sym of symbols) {
-    if (globalCurrentPrices[sym] === undefined) {
-      const txs = transactions.filter(t => t.symbol === sym);
-      globalCurrentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
-    }
-  }
-
   const assets = {};
   let totalInvested = 0;
   let totalCurrentValue = 0;
+
+  // Cargar precios actuales desde BD
+  const currentPrices = {};
+  for (const sym of symbols) {
+    currentPrices[sym] = await getCurrentPrice(sym);
+    if (currentPrices[sym] === null) {
+      // Fallback: último precio de compra
+      const txs = transactions.filter(t => t.symbol === sym);
+      currentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
+    }
+  }
 
   for (const t of transactions) {
     const key = t.symbol;
@@ -178,7 +189,7 @@ async function renderPortfolioSummary() {
   for (const symbol in assets) {
     const a = assets[symbol];
     if (a.totalQuantity < 0) a.totalQuantity = 0;
-    const currentPrice = globalCurrentPrices[symbol] || 0;
+    const currentPrice = currentPrices[symbol] || 0;
     a.currentValue = a.totalQuantity * currentPrice;
     totalCurrentValue += a.currentValue;
     a.gain = a.currentValue - a.totalInvested;
@@ -541,7 +552,7 @@ async function showDividendsList() {
   };
 }
 
-// --- Actualizar precios manualmente por símbolo ---
+// --- Actualizar precios (automático) ---
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -561,7 +572,7 @@ async function refreshPrices() {
       price = await fetchStockPrice(symbol);
     }
     if (price !== null) {
-      globalCurrentPrices[symbol] = price;
+      await saveCurrentPrice(symbol, price);
       updated++;
     }
   }
@@ -572,7 +583,7 @@ async function refreshPrices() {
 
 // --- Modal para actualizar precio manualmente ---
 function showManualPriceUpdate() {
-  const transactions = db.transactions.orderBy('symbol').toArray().then(txs => {
+  db.transactions.toArray().then(txs => {
     if (txs.length === 0) {
       alert('No hay transacciones.');
       return;
@@ -580,39 +591,43 @@ function showManualPriceUpdate() {
 
     const symbols = [...new Set(txs.map(t => t.symbol))];
     let options = '';
-    symbols.forEach(sym => {
-      const current = globalCurrentPrices[sym] !== undefined ? globalCurrentPrices[sym] : '—';
-      options += `<option value="${sym}">${sym} (actual: ${current !== '—' ? formatCurrency(current) : '—'})</option>`;
+    symbols.forEach(async (sym) => {
+      const current = await getCurrentPrice(sym);
+      const display = current !== null ? formatCurrency(current) : '—';
+      options += `<option value="${sym}">${sym} (actual: ${display})</option>`;
     });
 
-    const form = `
-      <div class="form-group">
-        <label>Símbolo:</label>
-        <select id="manualSymbol">${options}</select>
-      </div>
-      <div class="form-group">
-        <label>Precio actual (€):</label>
-        <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
-      </div>
-      <button id="btnSetManualPrice">Establecer Precio</button>
-    `;
-    openModal('Actualizar Precio Manualmente', form);
+    // Esperar a que se construyan todas las opciones
+    setTimeout(() => {
+      const form = `
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <select id="manualSymbol">${options}</select>
+        </div>
+        <div class="form-group">
+          <label>Precio actual (€):</label>
+          <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
+        </div>
+        <button id="btnSetManualPrice">Establecer Precio</button>
+      `;
+      openModal('Actualizar Precio Manualmente', form);
 
-    document.getElementById('btnSetManualPrice').onclick = () => {
-      const symbol = document.getElementById('manualSymbol').value;
-      const priceStr = document.getElementById('manualPrice').value;
-      const price = parseFloat(priceStr.replace(',', '.'));
+      document.getElementById('btnSetManualPrice').onclick = async () => {
+        const symbol = document.getElementById('manualSymbol').value;
+        const priceStr = document.getElementById('manualPrice').value;
+        const price = parseFloat(priceStr.replace(',', '.'));
 
-      if (isNaN(price) || price <= 0) {
-        alert('Introduce un precio válido.');
-        return;
-      }
+        if (isNaN(price) || price <= 0) {
+          alert('Introduce un precio válido.');
+          return;
+        }
 
-      globalCurrentPrices[symbol] = price;
-      closeModal();
-      renderPortfolioSummary();
-      showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
-    };
+        await saveCurrentPrice(symbol, price);
+        closeModal();
+        renderPortfolioSummary();
+        showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+      };
+    }, 100);
   });
 }
 
@@ -634,7 +649,8 @@ function showImportExport() {
   document.getElementById('btnExport').onclick = async () => {
     const transactions = await db.transactions.toArray();
     const dividends = await db.dividends.toArray();
-    const data = { transactions, dividends };
+    const prices = await db.prices.toArray();
+    const data = { transactions, dividends, prices };
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -669,14 +685,18 @@ function showImportExport() {
           throw new Error('Estructura inválida');
         }
         
-        await db.transaction('rw', db.transactions, db.dividends, async () => {
+        await db.transaction('rw', db.transactions, db.dividends, db.prices, async () => {
           await db.transactions.clear();
           await db.dividends.clear();
+          await db.prices.clear();
           if (Array.isArray(data.transactions)) {
             await db.transactions.bulkAdd(data.transactions);
           }
           if (Array.isArray(data.dividends)) {
             await db.dividends.bulkAdd(data.dividends);
+          }
+          if (Array.isArray(data.prices)) {
+            await db.prices.bulkAdd(data.prices);
           }
         });
         
@@ -710,8 +730,6 @@ document.addEventListener('DOMContentLoaded', () => {
     manualBtn.dataset.action = 'manual-price';
     manualBtn.innerHTML = '✏️ Actualizar Precio Manual';
     menu.appendChild(manualBtn);
-
-    manualBtn.addEventListener('click', showManualPriceUpdate);
   }
 
   document.querySelectorAll('#mainMenu button').forEach(btn => {
