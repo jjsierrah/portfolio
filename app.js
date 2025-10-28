@@ -26,7 +26,7 @@ function formatPercent(value) {
   }).format(value);
 }
 
-// Almacenar precios actuales globalmente (no en transacciones)
+// Almacenar precios actuales globalmente
 const globalCurrentPrices = {};
 
 // --- Notificación visual (toast) ---
@@ -97,9 +97,11 @@ async function fetchStockPrice(symbol) {
     }
   };
 
+  // Probar tal cual
   let price = await trySymbol(symbol);
   if (price !== null) return price;
 
+  // Probar con extensión de mercado
   const mapped = symbolMap[symbol.toUpperCase()];
   if (mapped) {
     price = await trySymbol(mapped);
@@ -139,7 +141,6 @@ async function renderPortfolioSummary() {
   const symbols = [...new Set(transactions.map(t => t.symbol))];
   for (const sym of symbols) {
     if (globalCurrentPrices[sym] === undefined) {
-      // Inicializar con último precio de compra si no hay precio actual
       const txs = transactions.filter(t => t.symbol === sym);
       globalCurrentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
     }
@@ -176,7 +177,7 @@ async function renderPortfolioSummary() {
   let totalGain = 0;
   for (const symbol in assets) {
     const a = assets[symbol];
-    if (a.totalQuantity < 0) a.totalQuantity = 0; // evitar negativos
+    if (a.totalQuantity < 0) a.totalQuantity = 0;
     const currentPrice = globalCurrentPrices[symbol] || 0;
     a.currentValue = a.totalQuantity * currentPrice;
     totalCurrentValue += a.currentValue;
@@ -540,6 +541,7 @@ async function showDividendsList() {
   };
 }
 
+// --- Actualizar precios manualmente por símbolo ---
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -566,6 +568,52 @@ async function refreshPrices() {
 
   renderPortfolioSummary();
   alert(`Precios actualizados: ${updated}/${symbols.length}`);
+}
+
+// --- Modal para actualizar precio manualmente ---
+function showManualPriceUpdate() {
+  const transactions = db.transactions.orderBy('symbol').toArray().then(txs => {
+    if (txs.length === 0) {
+      alert('No hay transacciones.');
+      return;
+    }
+
+    const symbols = [...new Set(txs.map(t => t.symbol))];
+    let options = '';
+    symbols.forEach(sym => {
+      const current = globalCurrentPrices[sym] !== undefined ? globalCurrentPrices[sym] : '—';
+      options += `<option value="${sym}">${sym} (actual: ${current !== '—' ? formatCurrency(current) : '—'})</option>`;
+    });
+
+    const form = `
+      <div class="form-group">
+        <label>Símbolo:</label>
+        <select id="manualSymbol">${options}</select>
+      </div>
+      <div class="form-group">
+        <label>Precio actual (€):</label>
+        <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
+      </div>
+      <button id="btnSetManualPrice">Establecer Precio</button>
+    `;
+    openModal('Actualizar Precio Manualmente', form);
+
+    document.getElementById('btnSetManualPrice').onclick = () => {
+      const symbol = document.getElementById('manualSymbol').value;
+      const priceStr = document.getElementById('manualPrice').value;
+      const price = parseFloat(priceStr.replace(',', '.'));
+
+      if (isNaN(price) || price <= 0) {
+        alert('Introduce un precio válido.');
+        return;
+      }
+
+      globalCurrentPrices[symbol] = price;
+      closeModal();
+      renderPortfolioSummary();
+      showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+    };
+  });
 }
 
 function showImportExport() {
@@ -655,6 +703,17 @@ function showImportExport() {
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
+  // Añadir opción "Actualizar Precio Manualmente" al menú
+  const menu = document.getElementById('mainMenu');
+  if (menu) {
+    const manualBtn = document.createElement('button');
+    manualBtn.dataset.action = 'manual-price';
+    manualBtn.innerHTML = '✏️ Actualizar Precio Manual';
+    menu.appendChild(manualBtn);
+
+    manualBtn.addEventListener('click', showManualPriceUpdate);
+  }
+
   document.querySelectorAll('#mainMenu button').forEach(btn => {
     btn.addEventListener('click', () => {
       const action = btn.dataset.action;
@@ -665,6 +724,7 @@ document.addEventListener('DOMContentLoaded', () => {
         case 'view-dividends': showDividendsList(); break;
         case 'import-export': showImportExport(); break;
         case 'refresh-prices': refreshPrices(); break;
+        case 'manual-price': showManualPriceUpdate(); break;
       }
     });
   });
