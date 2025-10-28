@@ -26,9 +26,42 @@ function formatPercent(value) {
   }).format(value);
 }
 
+// --- Notificación visual (toast) ---
+function showToast(message) {
+  const existing = document.getElementById('toast-notification');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'toast-notification';
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #4CAF50;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    z-index: 10000;
+    max-width: 90%;
+    text-align: center;
+  `;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.5s';
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 500);
+  }, 3000);
+}
+
 // --- APIs mejoradas para mercados europeos ---
 async function fetchStockPrice(symbol) {
-  // Mapa de símbolos comunes a sus tickers completos en Yahoo Finance
   const symbolMap = {
     // España (.MC)
     'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
@@ -61,18 +94,15 @@ async function fetchStockPrice(symbol) {
     }
   };
 
-  // 1. Probar con el símbolo tal cual (por si ya incluye .MC, .PA, etc.)
   let price = await trySymbol(symbol);
   if (price !== null) return price;
 
-  // 2. Si no, probar con la versión mapeada
   const mapped = symbolMap[symbol.toUpperCase()];
   if (mapped) {
     price = await trySymbol(mapped);
     if (price !== null) return price;
   }
 
-  // 3. Si sigue sin funcionar, devolver null
   return null;
 }
 
@@ -404,10 +434,10 @@ async function showAddDividendForm() {
 
     await db.dividends.add({ symbol: sym, amount: total, perShare, date });
     document.getElementById('modalOverlay').style.display = 'none';
+    showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
-
+    }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
