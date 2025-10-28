@@ -1,6 +1,6 @@
 const db = new Dexie('JJPortfolioDB');
-db.version(2).stores({
-  transactions: '++id, symbol, assetType, quantity, buyPrice, buyDate, currentPrice',
+db.version(3).stores({
+  transactions: '++id, symbol, name, assetType, quantity, buyPrice, commission, type, buyDate',
   dividends: '++id, symbol, amount, perShare, date'
 });
 
@@ -25,6 +25,9 @@ function formatPercent(value) {
     maximumFractionDigits: 2
   }).format(value);
 }
+
+// Almacenar precios actuales globalmente (no en transacciones)
+const globalCurrentPrices = {};
 
 // --- Notificación visual (toast) ---
 function showToast(message) {
@@ -133,37 +136,60 @@ async function renderPortfolioSummary() {
     return;
   }
 
+  const symbols = [...new Set(transactions.map(t => t.symbol))];
+  for (const sym of symbols) {
+    if (globalCurrentPrices[sym] === undefined) {
+      // Inicializar con último precio de compra si no hay precio actual
+      const txs = transactions.filter(t => t.symbol === sym);
+      globalCurrentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
+    }
+  }
+
   const assets = {};
-  let totalCost = 0;
-  let totalValue = 0;
+  let totalInvested = 0;
+  let totalCurrentValue = 0;
 
   for (const t of transactions) {
     const key = t.symbol;
     if (!assets[key]) {
       assets[key] = {
         symbol: t.symbol,
+        name: t.name,
         assetType: t.assetType,
         totalQuantity: 0,
-        totalCost: 0,
-        currentValue: 0
+        totalInvested: 0
       };
     }
-    assets[key].totalQuantity += t.quantity;
-    const cost = t.quantity * t.buyPrice;
-    assets[key].totalCost += cost;
-    const currentPrice = t.currentPrice || t.buyPrice;
-    assets[key].currentValue += t.quantity * currentPrice;
-    totalCost += cost;
-    totalValue += t.quantity * currentPrice;
+
+    if (t.type === 'buy') {
+      assets[key].totalQuantity += t.quantity;
+      const cost = t.quantity * t.buyPrice + t.commission;
+      assets[key].totalInvested += cost;
+      totalInvested += cost;
+    } else if (t.type === 'sell') {
+      assets[key].totalQuantity -= t.quantity;
+      const proceeds = t.quantity * t.buyPrice - t.commission;
+      totalInvested -= proceeds;
+    }
   }
 
-  const totalGain = totalValue - totalCost;
-  const totalGainPct = totalCost > 0 ? totalGain / totalCost : 0;
+  let totalGain = 0;
+  for (const symbol in assets) {
+    const a = assets[symbol];
+    if (a.totalQuantity < 0) a.totalQuantity = 0; // evitar negativos
+    const currentPrice = globalCurrentPrices[symbol] || 0;
+    a.currentValue = a.totalQuantity * currentPrice;
+    totalCurrentValue += a.currentValue;
+    a.gain = a.currentValue - a.totalInvested;
+    totalGain += a.gain;
+  }
+
+  const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
   const totalsHtml = `
     <div class="summary-card">
-      <div><strong>Total invertido:</strong> ${formatCurrency(totalCost)}</div>
-      <div><strong>Valor actual:</strong> ${formatCurrency(totalValue)}</div>
+      <div><strong>Total invertido:</strong> ${formatCurrency(totalInvested)}</div>
+      <div><strong>Valor actual:</strong> ${formatCurrency(totalCurrentValue)}</div>
       <div><strong>Ganancia:</strong> 
         <span style="color:${totalGain >= 0 ? 'green' : 'red'}">
           ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
@@ -175,7 +201,9 @@ async function renderPortfolioSummary() {
 
   const groups = { stock: [], etf: [], crypto: [] };
   Object.values(assets).forEach(asset => {
-    groups[asset.assetType].push(asset);
+    if (asset.totalQuantity > 0) {
+      groups[asset.assetType].push(asset);
+    }
   });
 
   let groupsHtml = '';
@@ -184,15 +212,15 @@ async function renderPortfolioSummary() {
     const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' }[type];
     groupsHtml += `<div class="group-title">${typeName}</div>`;
     for (const a of list) {
-      const gain = a.currentValue - a.totalCost;
-      const gainPct = a.totalCost > 0 ? gain / a.totalCost : 0;
+      const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
       groupsHtml += `
         <div class="asset-item">
-          <strong>${a.symbol}</strong>: ${a.totalQuantity} unidades | 
-          Invertido: ${formatCurrency(a.totalCost)} | 
+          <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
+          Cantidad: ${a.totalQuantity} | 
+          Invertido: ${formatCurrency(a.totalInvested)} | 
           Actual: ${formatCurrency(a.currentValue)} | 
-          Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">
-            ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${formatPercent(gainPct)})
+          Ganancia: <span style="color:${a.gain >= 0 ? 'green' : 'red'}">
+            ${a.gain >= 0 ? '+' : ''}${formatCurrency(a.gain)} (${formatPercent(gainPct)})
           </span>
         </div>
       `;
@@ -223,6 +251,13 @@ function openModal(title, content) {
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
+      <label>Tipo de operación:</label>
+      <select id="txType">
+        <option value="buy">Compra</option>
+        <option value="sell">Venta</option>
+      </select>
+    </div>
+    <div class="form-group">
       <label>Tipo de activo:</label>
       <select id="assetType">
         <option value="stock">Acción</option>
@@ -235,15 +270,23 @@ function showAddTransactionForm() {
       <input type="text" id="symbol" placeholder="AAPL, BTC..." required />
     </div>
     <div class="form-group">
+      <label>Nombre (opcional):</label>
+      <input type="text" id="name" placeholder="Apple Inc." />
+    </div>
+    <div class="form-group">
       <label>Cantidad:</label>
       <input type="number" id="quantity" step="any" min="0" required />
     </div>
     <div class="form-group">
-      <label>Precio de compra (€):</label>
-      <input type="number" id="buyPrice" step="any" min="0" required />
+      <label>Precio (€):</label>
+      <input type="number" id="price" step="any" min="0" required />
     </div>
     <div class="form-group">
-      <label>Fecha de compra:</label>
+      <label>Comisión (€):</label>
+      <input type="number" id="commission" step="any" min="0" value="0" />
+    </div>
+    <div class="form-group">
+      <label>Fecha:</label>
       <input type="date" id="buyDate" value="${today()}" required />
     </div>
     <button id="btnSaveTransaction">Añadir Transacción</button>
@@ -252,19 +295,29 @@ function showAddTransactionForm() {
 
   document.getElementById('btnSaveTransaction').onclick = async () => {
     const symbol = document.getElementById('symbol').value.trim().toUpperCase();
+    const name = document.getElementById('name').value.trim();
     const assetType = document.getElementById('assetType').value;
     const quantity = parseFloat(document.getElementById('quantity').value);
-    const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+    const price = parseFloat(document.getElementById('price').value);
+    const commission = parseFloat(document.getElementById('commission').value) || 0;
+    const type = document.getElementById('txType').value;
     const buyDate = document.getElementById('buyDate').value;
 
-    if (!symbol || isNaN(quantity) || isNaN(buyPrice)) {
-      alert('Completa todos los campos.');
+    if (!symbol || isNaN(quantity) || isNaN(price)) {
+      alert('Completa todos los campos obligatorios.');
       return;
     }
 
     await db.transactions.add({
-      symbol, assetType, quantity, buyPrice, buyDate,
-      currentPrice: buyPrice
+      symbol,
+      name,
+      assetType,
+      quantity,
+      buyPrice: price,
+      commission,
+      type,
+      buyDate,
+      createdAt: new Date().toISOString()
     });
 
     document.getElementById('modalOverlay').style.display = 'none';
@@ -281,18 +334,14 @@ async function showTransactionsList() {
 
   let html = '<h3>Transacciones</h3>';
   for (const t of txs) {
-    const currentPrice = t.currentPrice || t.buyPrice;
-    const currentValue = t.quantity * currentPrice;
-    const cost = t.quantity * t.buyPrice;
-    const gain = currentValue - cost;
-    const gainPct = cost > 0 ? ((gain / cost) * 100).toFixed(2) : '0.00';
-
+    const typeLabel = t.type === 'buy' ? 'Compra' : 'Venta';
+    const typeColor = t.type === 'buy' ? '#4CAF50' : '#f44336';
     html += `
       <div class="asset-item">
-        <strong>${t.symbol}</strong> (${t.assetType})<br>
-        ${t.quantity} @ ${formatCurrency(t.buyPrice)} (${t.buyDate})<br>
-        Actual: ${formatCurrency(currentPrice)} → ${formatCurrency(currentValue)}<br>
-        Ganancia: <span style="color:${gain >= 0 ? 'green' : 'red'}">${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${gainPct}%)</span>
+        <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
+        <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
+        ${t.quantity} @ ${formatCurrency(t.buyPrice)}<br>
+        Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
         <div style="margin-top:8px;">
           <button class="edit-btn" data-id="${t.id}">Editar</button>
           <button class="delete-btn" data-id="${t.id}">Eliminar</button>
@@ -317,6 +366,13 @@ async function showTransactionsList() {
       const form = `
         <div class="form-group">
           <label>Tipo:</label>
+          <select id="editTxType">
+            <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
+            <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tipo activo:</label>
           <select id="editAssetType">
             <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
             <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
@@ -328,16 +384,20 @@ async function showTransactionsList() {
           <input type="text" id="editSymbol" value="${tx.symbol}" required />
         </div>
         <div class="form-group">
+          <label>Nombre:</label>
+          <input type="text" id="editName" value="${tx.name || ''}" />
+        </div>
+        <div class="form-group">
           <label>Cantidad:</label>
           <input type="number" id="editQuantity" value="${tx.quantity}" required />
         </div>
         <div class="form-group">
-          <label>Precio compra (€):</label>
-          <input type="number" id="editBuyPrice" value="${tx.buyPrice}" required />
+          <label>Precio (€):</label>
+          <input type="number" id="editPrice" value="${tx.buyPrice}" required />
         </div>
         <div class="form-group">
-          <label>Precio actual (€):</label>
-          <input type="number" id="editCurrentPrice" value="${tx.currentPrice || tx.buyPrice}" required />
+          <label>Comisión (€):</label>
+          <input type="number" id="editCommission" value="${tx.commission || 0}" />
         </div>
         <div class="form-group">
           <label>Fecha:</label>
@@ -349,25 +409,28 @@ async function showTransactionsList() {
 
       document.getElementById('btnUpdateTx').onclick = async () => {
         const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
+        const name = document.getElementById('editName').value.trim();
         const assetType = document.getElementById('editAssetType').value;
         const quantity = parseFloat(document.getElementById('editQuantity').value);
-        const buyPrice = parseFloat(document.getElementById('editBuyPrice').value);
-        const currentPrice = parseFloat(document.getElementById('editCurrentPrice').value);
+        const price = parseFloat(document.getElementById('editPrice').value);
+        const commission = parseFloat(document.getElementById('editCommission').value) || 0;
+        const type = document.getElementById('editTxType').value;
         const buyDate = document.getElementById('editBuyDate').value;
 
-        if (!symbol || isNaN(quantity) || isNaN(buyPrice) || isNaN(currentPrice)) {
+        if (!symbol || isNaN(quantity) || isNaN(price)) {
           alert('Datos inválidos.');
           return;
         }
 
-        await db.transactions.update(id, { symbol, assetType, quantity, buyPrice, currentPrice, buyDate });
+        await db.transactions.update(id, {
+          symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
+        });
         document.getElementById('modalOverlay').style.display = 'none';
         showTransactionsList();
       };
     }
   };
 }
-
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -409,9 +472,14 @@ async function showAddDividendForm() {
   async function updateQty() {
     const sym = symbolSelect.value;
     const txs = await db.transactions.where('symbol').equals(sym).toArray();
-    const total = txs.reduce((sum, t) => sum + t.quantity, 0);
-    qtyInput.value = total;
-    totalInput.value = formatCurrency(total * (parseFloat(perShareInput.value) || 0));
+    const totalQty = txs.reduce((sum, t) => {
+      let qty = 0;
+      if (t.type === 'buy') qty += t.quantity;
+      if (t.type === 'sell') qty -= t.quantity;
+      return sum + qty;
+    }, 0);
+    qtyInput.value = Math.max(0, totalQty);
+    totalInput.value = formatCurrency(totalQty * (parseFloat(perShareInput.value) || 0));
   }
 
   symbolSelect.onchange = updateQty;
@@ -437,7 +505,8 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-    }
+}
+
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -472,27 +541,31 @@ async function showDividendsList() {
 }
 
 async function refreshPrices() {
-  const txs = await db.transactions.toArray();
-  if (txs.length === 0) {
+  const transactions = await db.transactions.toArray();
+  if (transactions.length === 0) {
     alert('No hay transacciones.');
     return;
   }
 
+  const symbols = [...new Set(transactions.map(t => t.symbol))];
   let updated = 0;
-  for (const t of txs) {
+
+  for (const symbol of symbols) {
     let price = null;
-    if (t.assetType === 'crypto') {
-      price = await fetchCryptoPrice(t.symbol);
+    const tx = transactions.find(t => t.symbol === symbol);
+    if (tx.assetType === 'crypto') {
+      price = await fetchCryptoPrice(symbol);
     } else {
-      price = await fetchStockPrice(t.symbol);
+      price = await fetchStockPrice(symbol);
     }
     if (price !== null) {
-      await db.transactions.update(t.id, { currentPrice: price });
+      globalCurrentPrices[symbol] = price;
       updated++;
     }
   }
+
   renderPortfolioSummary();
-  alert(`Actualizados: ${updated}/${txs.length}`);
+  alert(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
 function showImportExport() {
