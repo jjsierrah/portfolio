@@ -191,3 +191,31 @@ button:hover {
   width: 100% !important;
   height: 200px !important;
 }
+/* Gráficos */
+#charts {
+  margin-top: 20px;
+}
+
+.chart-container {
+  background: white;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  height: 250px;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 200px !important;
+}
+
+/* Botones de exportación */
+.export-section {
+  margin: 16px 0;
+}
+
+.export-section button {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
