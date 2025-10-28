@@ -18,7 +18,6 @@
       <option value="view-transactions">Transacciones</option>
       <option value="add-dividend">Añadir Dividendo</option>
       <option value="view-dividends">Dividendos</option>
-      <option value="import-export">Exportar / Importar</option>
     </select>
   </header>
 
@@ -29,33 +28,13 @@
       <div id="summary-totals"></div>
       <div id="summary-by-type"></div>
     </section>
-
-    <!-- Gráficos (solo si Chart.js carga) -->
-    <section id="charts" style="display:none;">
-      <h2>Análisis Visual</h2>
-      <div class="chart-container">
-        <canvas id="chartByType"></canvas>
-      </div>
-      <div class="chart-container">
-        <canvas id="chartByAsset"></canvas>
-      </div>
-    </section>
   </main>
 
   <div id="modalOverlay" class="modal-overlay">
     <div id="modalContent" class="modal-content"></div>
   </div>
 
-  <!-- Cargar Chart.js asíncronamente -->
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
-  <script>
-    // Cargar Chart.js sin bloquear
-    let chartJsLoaded = false;
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-    script.onload = () => { chartJsLoaded = true; };
-    document.head.appendChild(script);
-  </script>
   <script src="app.js"></script>
 </body>
 </html>
