@@ -12,20 +12,33 @@
 <body>
   <header>
     <h1>JJ Portfolio</h1>
-    <select id="mainMenu">
-      <option value="">— Menú —</option>
-      <option value="add-transaction">Añadir Transacción</option>
-      <option value="view-transactions">Transacciones</option>
-      <option value="add-dividend">Añadir Dividendo</option>
-      <option value="view-dividends">Dividendos</option>
-      <option value="import-export">Exportar / Importar</option>
-    </select>
   </header>
+
+  <!-- Menú con iconos, debajo del título -->
+  <nav id="mainMenu" class="menu-icons">
+    <button data-action="add-transaction">
+      ➕ Añadir Transacción
+    </button>
+    <button data-action="view-transactions">
+      📋 Transacciones
+    </button>
+    <button data-action="add-dividend">
+      💰 Añadir Dividendo
+    </button>
+    <button data-action="view-dividends">
+      📊 Dividendos
+    </button>
+    <button data-action="import-export">
+      📤 Exportar / Importar
+    </button>
+    <button data-action="refresh-prices">
+      🔄 Actualizar Precios
+    </button>
+  </nav>
 
   <main>
     <section id="portfolio-summary">
       <h2>Resumen del Portfolio</h2>
-      <button id="btnRefreshPrices" class="refresh-btn">Actualizar Precios</button>
       <div id="summary-totals"></div>
       <div id="summary-by-type"></div>
     </section>
