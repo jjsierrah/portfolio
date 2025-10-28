@@ -448,7 +448,7 @@ function showImportExport() {
     const dividends = await db.dividends.toArray();
     const data = { transactions, dividends };
     const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -464,45 +464,69 @@ function showImportExport() {
     if (!confirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?')) {
       return;
     }
+    
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.json';
+    
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      
+      let text, data;
       try {
-        const text = await file.text();
-        const data = JSON.parse(text);
-        await db.transactions.clear();
-        await db.dividends.clear();
-        if (data.transactions) await db.transactions.bulkAdd(data.transactions);
-        if (data.dividends) await db.dividends.bulkAdd(data.dividends);
+        text = await file.text();
+        data = JSON.parse(text);
+        if (!data || typeof data !== 'object') {
+          throw new Error('Estructura inválida');
+        }
+        
+        await db.transaction('rw', db.transactions, db.dividends, async () => {
+          await db.transactions.clear();
+          await db.dividends.clear();
+          if (Array.isArray(data.transactions)) {
+            await db.transactions.bulkAdd(data.transactions);
+          }
+          if (Array.isArray(data.dividends)) {
+            await db.dividends.bulkAdd(data.dividends);
+          }
+        });
+        
         closeModal();
         renderPortfolioSummary();
-        alert('Datos importados correctamente.');
+        alert('✅ Datos importados correctamente.');
+        
       } catch (err) {
-        alert('Error: archivo no válido.');
+        console.error('Error en importación:', err);
+        alert('❌ Error: archivo no válido o corrupto.');
+      } finally {
+        if (input.parentNode) {
+          input.parentNode.removeChild(input);
+        }
       }
     };
+    
+    document.body.appendChild(input);
     input.click();
   };
 }
 
+// --- Inicialización con botones de menú ---
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  document.getElementById('btnRefreshPrices').addEventListener('click', refreshPrices);
-
-  document.getElementById('mainMenu').addEventListener('change', function () {
-    const action = this.value;
-    this.selectedIndex = 0;
-    switch (action) {
-      case 'add-transaction': showAddTransactionForm(); break;
-      case 'view-transactions': showTransactionsList(); break;
-      case 'add-dividend': showAddDividendForm(); break;
-      case 'view-dividends': showDividendsList(); break;
-      case 'import-export': showImportExport(); break;
-    }
+  document.querySelectorAll('#mainMenu button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      switch (action) {
+        case 'add-transaction': showAddTransactionForm(); break;
+        case 'view-transactions': showTransactionsList(); break;
+        case 'add-dividend': showAddDividendForm(); break;
+        case 'view-dividends': showDividendsList(); break;
+        case 'import-export': showImportExport(); break;
+        case 'refresh-prices': refreshPrices(); break;
+      }
+    });
   });
 
   if ('serviceWorker' in navigator) {
