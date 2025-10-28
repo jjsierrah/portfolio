@@ -14,24 +14,49 @@ body {
 }
 
 header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  text-align: center;
   margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom: 1px solid #ddd;
 }
 
 header h1 {
-  font-size: 1.6rem;
+  font-size: 1.8rem;
   color: #1a73e8;
+  font-weight: bold;
+  margin-top: 10px;
 }
 
-#mainMenu {
-  padding: 8px;
-  font-size: 1rem;
-  border-radius: 6px;
-  border: 1px solid #ccc;
+/* Menú con iconos */
+.menu-icons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0 24px;
+}
+
+.menu-icons button {
+  background-color: white; /* ✅ Fondo blanco puro */
+  border: 1px solid #ccc;  /* ✅ Borde visible */
+  border-radius: 8px;
+  padding: 14px 10px;
+  font-size: 0.95rem;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  color: #222; /* ✅ Texto oscuro y legible */
+  font-weight: 600;
+}
+
+.menu-icons button:hover {
+  background-color: #e8f0fe;
+  border-color: #1a73e8;
+  transform: translateY(-2px);
 }
 
 section {
@@ -45,6 +70,7 @@ section {
 h2 {
   margin-bottom: 16px;
   font-size: 1.3rem;
+  color: #1a73e8;
 }
 
 .summary-card {
@@ -103,6 +129,7 @@ h2 {
 
 .modal-header h3 {
   margin: 0;
+  color: #1a73e8;
 }
 
 .close-modal {
@@ -121,6 +148,7 @@ label {
   display: block;
   margin-bottom: 4px;
   font-weight: bold;
+  color: #333;
 }
 
 input, select, button {
@@ -144,21 +172,6 @@ button:hover {
   opacity: 0.9;
 }
 
-.refresh-btn {
-  background-color: #4CAF50;
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: bold;
-  margin-bottom: 16px;
-  cursor: pointer;
-}
-
-.refresh-btn:hover {
-  opacity: 0.9;
-}
-
 .delete-btn, .edit-btn {
   background: #f44336;
   color: white;
@@ -172,79 +185,4 @@ button:hover {
 
 .edit-btn {
   background: #4CAF50;
-}
-
-#charts {
-  margin-top: 20px;
-}
-
-.chart-container {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  height: 250px;
-}
-
-.chart-container canvas {
-  width: 100% !important;
-  height: 200px !important;
-}
-/* Gráficos */
-#charts {
-  margin-top: 20px;
-}
-
-.chart-container {
-  background: white;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  height: 250px;
-}
-
-.chart-container canvas {
-  width: 100% !important;
-  height: 200px !important;
-}
-
-/* Botones de exportación */
-.export-section {
-  margin: 16px 0;
-}
-
-.export-section button {
-  margin-right: 8px;
-  margin-bottom: 8px;
-}
-/* Menú con iconos */
-.menu-icons {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin: 16px 0 24px;
-}
-
-.menu-icons button {
-  background-color: #f5f7fa;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 12px 10px;
-  font-size: 0.95rem;
-  text-align: center;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-
-.menu-icons button:hover {
-  background-color: #e8f0fe;
-  border-color: #1a73e8;
-  transform: translateY(-2px);
 }
