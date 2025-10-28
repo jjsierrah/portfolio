@@ -4,6 +4,9 @@ db.version(2).stores({
   dividends: '++id, symbol, amount, perShare, date'
 });
 
+let chartByType = null;
+let chartByAsset = null;
+
 function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
@@ -26,24 +29,53 @@ function formatPercent(value) {
   }).format(value);
 }
 
+// --- APIs mejoradas para mercados europeos ---
 async function fetchStockPrice(symbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const quote = data.quoteResponse?.result?.[0];
-    return quote?.regularMarketPrice || null;
-  } catch {
-    return null;
+  // Lista de símbolos comunes por país
+  const symbolMap = {
+    // España
+    'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
+    'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
+    // Francia
+    'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA',
+    // Alemania
+    'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE',
+    // Italia
+    'ENI': 'ENI.MI', 'ISP': 'ISP.MI'
+  };
+
+  const trySymbol = async (sym) => {
+    try {
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`;
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const quote = data.quoteResponse?.result?.[0];
+      return quote?.regularMarketPrice || null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Probar el símbolo tal cual
+  let price = await trySymbol(symbol);
+  if (price !== null) return price;
+
+  // Si no, probar con extensión de mercado
+  const mapped = symbolMap[symbol.toUpperCase()];
+  if (mapped) {
+    price = await trySymbol(mapped);
+    if (price !== null) return price;
   }
+
+  return null;
 }
 
 async function fetchCryptoPrice(symbol) {
   const cryptoMap = {
     'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'ADA': 'cardano',
     'DOT': 'polkadot', 'LINK': 'chainlink', 'XRP': 'ripple', 'MATIC': 'polygon',
-    'DOGE': 'dogecoin', 'SHIB': 'shiba-inu', 'AVAX': 'avalanche-2'
+    'DOGE': 'dogecoin', 'SHIB': 'shiba-inu', 'AVAX': 'avalanche-2', 'TON': 'the-open-network'
   };
   const id = cryptoMap[symbol.toUpperCase()];
   if (!id) return null;
@@ -58,6 +90,7 @@ async function fetchCryptoPrice(symbol) {
   }
 }
 
+// --- Render con gráficos seguros ---
 async function renderPortfolioSummary() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -132,8 +165,167 @@ async function renderPortfolioSummary() {
     }
   }
   document.getElementById('summary-by-type').innerHTML = groupsHtml;
+
+  // --- Renderizar gráficos solo si Chart.js está listo ---
+  if (window.chartJsLoaded && typeof Chart !== 'undefined') {
+    updateCharts(groups, assets);
+    document.getElementById('charts').style.display = 'block';
+  } else {
+    document.getElementById('charts').style.display = 'none';
+  }
 }
 
+function updateCharts(groups, assets) {
+  // Chart por tipo
+  const ctx1 = document.getElementById('chartByType')?.getContext('2d');
+  if (ctx1) {
+    if (chartByType) chartByType.destroy();
+    const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' };
+    const colors = { stock: '#4285F4', etf: '#34A853', crypto: '#FBBC05' };
+    const data = [];
+    const labels = [];
+    const bgColors = [];
+    for (const [type, list] of Object.entries(groups)) {
+      if (list.length === 0) continue;
+      const total = list.reduce((sum, a) => sum + a.currentValue, 0);
+      labels.push(typeNames[type]);
+      data.push(total);
+      bgColors.push(colors[type]);
+    }
+    chartByType = new Chart(ctx1, {
+      type: 'doughnut',
+       {
+        labels,
+        datasets: [{ data, backgroundColor: bgColors, borderWidth: 2, borderColor: '#fff' }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.label}: ${formatCurrency(ctx.parsed)}`
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // Chart por activo
+  const ctx2 = document.getElementById('chartByAsset')?.getContext('2d');
+  if (ctx2) {
+    if (chartByAsset) chartByAsset.destroy();
+    const sorted = Object.values(assets).sort((a, b) => b.currentValue - a.currentValue).slice(0, 5);
+    const labels = sorted.map(a => a.symbol);
+    const data = sorted.map(a => a.currentValue);
+    const bgColors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'].slice(0, data.length);
+    chartByAsset = new Chart(ctx2, {
+      type: 'bar',
+       {
+        labels,
+        datasets: [{ label: 'Valor (€)', data, backgroundColor: bgColors, borderWidth: 1 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            ticks: {
+              callback: (v) => formatCurrency(v).replace(/[^0-9,€]/g, '')
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+// --- Exportar / Importar ---
+function showImportExport() {
+  const content = `
+    <h3>Exportar / Importar Datos</h3>
+    <div class="export-section">
+      <button id="btnExport">Exportar a JSON</button>
+      <button id="btnImport">Importar desde JSON</button>
+    </div>
+    <p style="font-size:0.9em; color:#666;">
+      ⚠️ Importar reemplazará todos tus datos actuales.
+    </p>
+  `;
+  openModal('Exportar / Importar', content);
+
+  document.getElementById('btnExport').onclick = async () => {
+    const transactions = await db.transactions.toArray();
+    const dividends = await db.dividends.toArray();
+    const data = { transactions, dividends };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'jj-portfolio-backup.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  document.getElementById('btnImport').onclick = async () => {
+    if (!confirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?')) return;
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        await db.transactions.clear();
+        await db.dividends.clear();
+        if (data.transactions) await db.transactions.bulkAdd(data.transactions);
+        if (data.dividends) await db.dividends.bulkAdd(data.dividends);
+        closeModal();
+        renderPortfolioSummary();
+        alert('Datos importados correctamente.');
+      } catch (err) {
+        alert('Error al importar: archivo no válido.');
+      }
+    };
+    input.click();
+  };
+}
+
+// --- Notificación de dividendos (mensaje emergente) ---
+function notifyDividend(symbol, amount) {
+  if ('serviceWorker' in navigator && 'showNotification' in ServiceWorkerRegistration.prototype) {
+    // Opcional: notificación push (requiere permisos)
+  }
+  // Mensaje en pantalla
+  const notification = document.createElement('div');
+  notification.textContent = `✅ Dividendo añadido: ${symbol} - ${formatCurrency(amount)}`;
+  notification.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #4CAF50;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 6px;
+    z-index: 10000;
+    font-weight: bold;
+  `;
+  document.body.appendChild(notification);
+  setTimeout(() => {
+    notification.style.opacity = '0';
+    notification.style.transition = 'opacity 0.5s';
+    setTimeout(() => document.body.removeChild(notification), 500);
+  }, 3000);
+}
+
+// --- Resto de funciones (modales, formularios, etc.) ---
 function openModal(title, content) {
   document.getElementById('modalContent').innerHTML = `
     <div class="modal-header">
@@ -299,8 +491,7 @@ async function showTransactionsList() {
       };
     }
   };
-}
-
+        }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -367,6 +558,7 @@ async function showAddDividendForm() {
 
     await db.dividends.add({ symbol: sym, amount: total, perShare, date });
     document.getElementById('modalOverlay').style.display = 'none';
+    notifyDividend(sym, total); // ✅ Notificación
     renderPortfolioSummary();
   };
 }
@@ -428,6 +620,7 @@ async function refreshPrices() {
   alert(`Actualizados: ${updated}/${txs.length}`);
 }
 
+// --- Inicialización ---
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
@@ -441,6 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'view-transactions': showTransactionsList(); break;
       case 'add-dividend': showAddDividendForm(); break;
       case 'view-dividends': showDividendsList(); break;
+      case 'import-export': showImportExport(); break;
     }
   });
 
