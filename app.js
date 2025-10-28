@@ -428,6 +428,66 @@ async function refreshPrices() {
   alert(`Actualizados: ${updated}/${txs.length}`);
 }
 
+function showImportExport() {
+  const content = `
+    <h3>Exportar / Importar Datos</h3>
+    <p style="margin:10px 0;">
+      <button id="btnExport" style="width:auto;">Exportar a JSON</button>
+    </p>
+    <p style="margin:10px 0;">
+      <button id="btnImport" style="width:auto;">Importar desde JSON</button>
+    </p>
+    <p style="font-size:0.9em; color:#666;">
+      ⚠️ Importar reemplazará todos tus datos actuales.
+    </p>
+  `;
+  openModal('Exportar / Importar', content);
+
+  document.getElementById('btnExport').onclick = async () => {
+    const transactions = await db.transactions.toArray();
+    const dividends = await db.dividends.toArray();
+    const data = { transactions, dividends };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'jj-portfolio-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    closeModal();
+  };
+
+  document.getElementById('btnImport').onclick = async () => {
+    if (!confirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?')) {
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        await db.transactions.clear();
+        await db.dividends.clear();
+        if (data.transactions) await db.transactions.bulkAdd(data.transactions);
+        if (data.dividends) await db.dividends.bulkAdd(data.dividends);
+        closeModal();
+        renderPortfolioSummary();
+        alert('Datos importados correctamente.');
+      } catch (err) {
+        alert('Error: archivo no válido.');
+      }
+    };
+    input.click();
+  };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
@@ -441,6 +501,7 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'view-transactions': showTransactionsList(); break;
       case 'add-dividend': showAddDividendForm(); break;
       case 'view-dividends': showDividendsList(); break;
+      case 'import-export': showImportExport(); break;
     }
   });
 
