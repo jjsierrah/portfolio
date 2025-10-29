@@ -245,20 +245,45 @@ async function renderPortfolioSummary() {
 }
 
 function openModal(title, content) {
-  document.getElementById('modalContent').innerHTML = `
+  // Crear overlay si no existe
+  let overlay = document.getElementById('modalOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modalOverlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  // Crear contenido si no existe
+  let modalContent = document.getElementById('modalContent');
+  if (!modalContent) {
+    modalContent = document.createElement('div');
+    modalContent.id = 'modalContent';
+    modalContent.className = 'modal-content';
+    overlay.appendChild(modalContent);
+  }
+
+  modalContent.innerHTML = `
     <div class="modal-header">
       <h3>${title}</h3>
       <button class="close-modal">&times;</button>
     </div>
-    ${content}
+    <div class="modal-body">
+      ${content}
+    </div>
   `;
-  document.getElementById('modalOverlay').style.display = 'flex';
+
+  overlay.style.display = 'flex';
+
+  // Cerrar al hacer clic en la X
   document.querySelector('.close-modal').onclick = () => {
-    document.getElementById('modalOverlay').style.display = 'none';
+    overlay.style.display = 'none';
   };
-  document.getElementById('modalOverlay').onclick = (e) => {
-    if (e.target.id === 'modalOverlay') {
-      document.getElementById('modalOverlay').style.display = 'none';
+
+  // Cerrar al hacer clic fuera del contenido
+  overlay.onclick = (e) => {
+    if (e.target === overlay) {
+      overlay.style.display = 'none';
     }
   };
 }
@@ -304,7 +329,7 @@ function showAddTransactionForm() {
       <label>Fecha:</label>
       <input type="date" id="buyDate" value="${today()}" required />
     </div>
-    <button id="btnSaveTransaction">Añadir Transacción</button>
+    <button id="btnSaveTransaction" class="btn-primary">Añadir Transacción</button>
   `;
   openModal('Añadir Transacción', form);
 
@@ -358,9 +383,9 @@ async function showTransactionsList() {
         <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
         ${t.quantity} @ ${formatCurrency(t.buyPrice)} = ${formatCurrency(totalAmount)}<br>
         Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
-        <div style="margin-top:8px;">
-          <button class="edit-btn" data-id="${t.id}">Editar</button>
-          <button class="delete-btn" data-id="${t.id}">Eliminar</button>
+        <div class="modal-actions">
+          <button class="btn-edit" data-id="${t.id}">Editar</button>
+          <button class="btn-delete" data-id="${t.id}">Eliminar</button>
         </div>
       </div>
     `;
@@ -368,13 +393,13 @@ async function showTransactionsList() {
   openModal('Transacciones', html);
 
   document.getElementById('modalContent').onclick = async (e) => {
-    if (e.target.classList.contains('delete-btn')) {
+    if (e.target.classList.contains('btn-delete')) {
       if (!confirm('¿Eliminar?')) return;
       const id = parseInt(e.target.dataset.id);
       await db.transactions.delete(id);
       showTransactionsList();
     }
-    if (e.target.classList.contains('edit-btn')) {
+    if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
       const tx = await db.transactions.get(id);
       if (!tx) return;
@@ -419,7 +444,7 @@ async function showTransactionsList() {
           <label>Fecha:</label>
           <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
         </div>
-        <button id="btnUpdateTx">Guardar</button>
+        <button id="btnUpdateTx" class="btn-primary">Guardar</button>
       `;
       openModal('Editar Transacción', form);
 
@@ -446,7 +471,7 @@ async function showTransactionsList() {
       };
     }
   };
-      }
+    }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -476,7 +501,7 @@ async function showAddDividendForm() {
       <label>Fecha:</label>
       <input type="date" id="divDate" value="${today()}" />
     </div>
-    <button id="btnSaveDiv">Añadir Dividendo</button>
+    <button id="btnSaveDiv" class="btn-primary">Añadir Dividendo</button>
   `;
   openModal('Añadir Dividendo', form);
 
@@ -537,8 +562,8 @@ async function showDividendsList() {
     html += `
       <div class="asset-item">
         <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${d.date}
-        <div style="margin-top:8px;">
-          <button class="delete-btn" data-id="${d.id}">Eliminar</button>
+        <div class="modal-actions">
+          <button class="btn-delete" data-id="${d.id}">Eliminar</button>
         </div>
       </div>
     `;
@@ -547,7 +572,7 @@ async function showDividendsList() {
   openModal('Dividendos', html);
 
   document.getElementById('modalContent').onclick = async (e) => {
-    if (e.target.classList.contains('delete-btn')) {
+    if (e.target.classList.contains('btn-delete')) {
       if (!confirm('¿Eliminar dividendo?')) return;
       const id = parseInt(e.target.dataset.id);
       await db.dividends.delete(id);
@@ -608,7 +633,7 @@ function showManualPriceUpdate() {
         <label>Precio actual (€):</label>
         <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
       </div>
-      <button id="btnSetManualPrice">Establecer Precio</button>
+      <button id="btnSetManualPrice" class="btn-primary">Establecer Precio</button>
     `;
     openModal('Actualizar Precio Manualmente', form);
 
@@ -633,13 +658,13 @@ function showManualPriceUpdate() {
 function showImportExport() {
   const content = `
     <h3>Exportar / Importar Datos</h3>
-    <p style="margin:10px 0;">
-      <button id="btnExport" style="width:auto;">Exportar a JSON</button>
+    <p class="modal-section">
+      <button id="btnExport" class="btn-primary">Exportar a JSON</button>
     </p>
-    <p style="margin:10px 0;">
-      <button id="btnImport" style="width:auto;">Importar desde JSON</button>
+    <p class="modal-section">
+      <button id="btnImport" class="btn-primary">Importar desde JSON</button>
     </p>
-    <p style="font-size:0.9em; color:#666;">
+    <p class="modal-note">
       ⚠️ Importar reemplazará todos tus datos actuales.
     </p>
   `;
