@@ -24,7 +24,6 @@ header h1 {
   font-size: 1.8rem;
   color: #1a73e8;
   font-weight: bold;
-  margin-top: 10px;
 }
 
 #mainMenu {
@@ -50,29 +49,6 @@ h2 {
   color: #1a73e8;
 }
 
-.summary-card {
-  background: #f9f9f9;
-  padding: 12px;
-  border-radius: 6px;
-  margin-bottom: 12px;
-}
-
-.group-title {
-  font-weight: bold;
-  margin: 12px 0 8px;
-  color: #1a73e8;
-}
-
-.asset-item {
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-  font-size: 0.95rem;
-}
-
-.asset-item:last-child {
-  border-bottom: none;
-}
-
 .modal-overlay {
   display: none;
   position: fixed;
@@ -95,71 +71,4 @@ h2 {
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.modal-header h3 {
-  margin: 0;
-  color: #1a73e8;
-}
-
-.close-modal {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: #888;
-}
-
-.form-group {
-  margin-bottom: 14px;
-}
-
-label {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: bold;
-  color: #333;
-}
-
-input, select, button {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 1rem;
-}
-
-button {
-  background-color: #1a73e8;
-  color: white;
-  border: none;
-  cursor: pointer;
-  font-weight: bold;
-  margin-top: 8px;
-}
-
-button:hover {
-  opacity: 0.9;
-}
-
-.delete-btn, .edit-btn {
-  background: #f44336;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 0.85rem;
-  margin-left: 6px;
-}
-
-.edit-btn {
-  background: #4CAF50;
-}
+  }
