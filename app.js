@@ -609,8 +609,10 @@ function showManualPriceUpdate() {
 
       await saveCurrentPrice(symbol, price);
       closeModal();
-      await renderPortfolioSummary(); // Actualiza inmediatamente
-      showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+      // Refrescar inmediatamente sin esperar
+      renderPortfolioSummary().then(() => {
+        showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+      });
     };
   });
 }
@@ -706,14 +708,14 @@ function showImportExport() {
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  // Eliminar cualquier menú anterior y crear solo el select
+  // Asegurar que solo exista un menú (combo)
   const header = document.querySelector('header');
-  // Eliminar botones anteriores si existen
-  const oldMenu = document.getElementById('mainMenu');
-  if (oldMenu) oldMenu.remove();
+  let menuSelect = document.getElementById('mainMenu');
+  if (menuSelect) menuSelect.remove();
 
-  const menuSelect = document.createElement('select');
+  menuSelect = document.createElement('select');
   menuSelect.id = 'mainMenu';
+  menuSelect.style.marginTop = '12px'; // ✅ Espaciado bajo el título
   menuSelect.innerHTML = `
     <option value="">— Menú —</option>
     <option value="add-transaction">➕ Añadir Transacción</option>
@@ -726,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
   `;
   header.appendChild(menuSelect);
 
-  document.getElementById('mainMenu').addEventListener('change', function () {
+  menuSelect.addEventListener('change', function () {
     const action = this.value;
     this.selectedIndex = 0;
     switch (action) {
