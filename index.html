@@ -5,21 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JJ Portfolio</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#1a73e8" />
-  <link rel="icon" href="image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💼</text></svg>">
 </head>
 <body>
   <header>
     <h1>💼 JJ Portfolio</h1>
     <select id="mainMenu">
       <option value="">— Menú —</option>
+      <option value="refresh-prices">🔄 Actualizar Precios</option>
+      <option value="manual-price">✏️ Actualizar Precio Manual</option>
       <option value="add-transaction">➕ Añadir Transacción</option>
       <option value="view-transactions">📋 Transacciones</option>
       <option value="add-dividend">💰 Añadir Dividendo</option>
       <option value="view-dividends">📊 Dividendos</option>
-      <option value="refresh-prices">🔄 Actualizar Precios</option>
-      <option value="manual-price">✏️ Actualizar Precio Manual</option>
       <option value="import-export">📤 Exportar / Importar</option>
     </select>
   </header>
@@ -27,7 +24,7 @@
   <main>
     <section id="portfolio-summary">
       <h2>Resumen del Portfolio</h2>
-      <div id="summary-totals"></div>
+      <div id="summary-totals">Cargando...</div>
       <div id="summary-by-type"></div>
     </section>
   </main>
