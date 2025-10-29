@@ -431,7 +431,7 @@ async function showTransactionsList() {
       };
     }
   };
-          async function showAddDividendForm() {
+   async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
     alert('Añade una transacción primero.');
@@ -706,27 +706,7 @@ function showImportExport() {
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  const header = document.querySelector('header');
-  let menuSelect = document.getElementById('mainMenu');
-  if (menuSelect) menuSelect.remove();
-
-  menuSelect = document.createElement('select');
-  menuSelect.id = 'mainMenu';
-  menuSelect.style.marginTop = '12px';
-  // ✅ "Actualizar Precios" ANTES de "Actualizar Precio Manual"
-  menuSelect.innerHTML = `
-    <option value="">— Menú —</option>
-    <option value="add-transaction">➕ Añadir Transacción</option>
-    <option value="view-transactions">📋 Transacciones</option>
-    <option value="add-dividend">💰 Añadir Dividendo</option>
-    <option value="view-dividends">📊 Dividendos</option>
-    <option value="refresh-prices">🔄 Actualizar Precios</option>
-    <option value="manual-price">✏️ Actualizar Precio Manual</option>
-    <option value="import-export">📤 Exportar / Importar</option>
-  `;
-  header.appendChild(menuSelect);
-
-  menuSelect.addEventListener('change', function () {
+  document.getElementById('mainMenu').addEventListener('change', function () {
     const action = this.value;
     this.selectedIndex = 0;
     switch (action) {
@@ -743,4 +723,4 @@ document.addEventListener('DOMContentLoaded', () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js');
   }
-});                                          }
+});                                                   }
