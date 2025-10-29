@@ -2,7 +2,7 @@ const db = new Dexie('JJPortfolioDB');
 db.version(4).stores({
   transactions: '++id, symbol, name, assetType, quantity, buyPrice, commission, type, buyDate',
   dividends: '++id, symbol, amount, perShare, date',
-  prices: 'symbol' // Almacenar precios actuales persistentemente
+  prices: 'symbol'
 });
 
 function today() {
@@ -27,7 +27,6 @@ function formatPercent(value) {
   }).format(value);
 }
 
-// --- Notificación visual (toast) ---
 function showToast(message) {
   const existing = document.getElementById('toast-notification');
   if (existing) existing.remove();
@@ -61,24 +60,17 @@ function showToast(message) {
   }, 3000);
 }
 
-// --- APIs mejoradas para mercados europeos ---
 async function fetchStockPrice(symbol) {
   const symbolMap = {
-    // España (.MC)
     'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
     'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
     'FER': 'FER.MC', 'CABK': 'CABK.MC', 'MAP': 'MAP.MC',
-    // Francia (.PA)
     'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA', 'AI': 'AI.PA',
     'DG': 'DG.PA', 'RI': 'RI.PA', 'FP': 'FP.PA',
-    // Alemania (.DE)
     'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE', 'BMW': 'BMW.DE',
     'DAI': 'DAI.DE', 'SIE': 'SIE.DE',
-    // Italia (.MI)
     'ENI': 'ENI.MI', 'ISP': 'ISP.MI', 'UCG': 'UCG.MI', 'STM': 'STM.MI',
-    // Países Bajos (.AS)
     'ASML': 'ASML.AS', 'RDSA': 'RDSA.AS',
-    // Suiza (.SW)
     'NESN': 'NESN.SW', 'ROG': 'ROG.SW'
   };
 
@@ -126,13 +118,11 @@ async function fetchCryptoPrice(symbol) {
   }
 }
 
-// Obtener precio actual (de BD o fallback)
 async function getCurrentPrice(symbol) {
   const saved = await db.prices.get(symbol);
   return saved ? saved.price : null;
 }
 
-// Guardar precio actual en BD
 async function saveCurrentPrice(symbol, price) {
   await db.prices.put({ symbol, price });
 }
@@ -150,12 +140,10 @@ async function renderPortfolioSummary() {
   let totalInvested = 0;
   let totalCurrentValue = 0;
 
-  // Cargar precios actuales desde BD
   const currentPrices = {};
   for (const sym of symbols) {
     currentPrices[sym] = await getCurrentPrice(sym);
     if (currentPrices[sym] === null) {
-      // Fallback: último precio de compra
       const txs = transactions.filter(t => t.symbol === sym);
       currentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
     }
@@ -348,11 +336,12 @@ async function showTransactionsList() {
   for (const t of txs) {
     const typeLabel = t.type === 'buy' ? 'Compra' : 'Venta';
     const typeColor = t.type === 'buy' ? '#4CAF50' : '#f44336';
+    const totalAmount = t.quantity * t.buyPrice;
     html += `
       <div class="asset-item">
         <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
         <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
-        ${t.quantity} @ ${formatCurrency(t.buyPrice)}<br>
+        ${t.quantity} @ ${formatCurrency(t.buyPrice)} = ${formatCurrency(totalAmount)}<br>
         Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
         <div style="margin-top:8px;">
           <button class="edit-btn" data-id="${t.id}">Editar</button>
@@ -552,7 +541,6 @@ async function showDividendsList() {
   };
 }
 
-// --- Actualizar precios (automático) ---
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -581,9 +569,8 @@ async function refreshPrices() {
   alert(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
-// --- Modal para actualizar precio manualmente ---
 function showManualPriceUpdate() {
-  db.transactions.toArray().then(txs => {
+  db.transactions.toArray().then(async (txs) => {
     if (txs.length === 0) {
       alert('No hay transacciones.');
       return;
@@ -591,43 +578,40 @@ function showManualPriceUpdate() {
 
     const symbols = [...new Set(txs.map(t => t.symbol))];
     let options = '';
-    symbols.forEach(async (sym) => {
+    for (const sym of symbols) {
       const current = await getCurrentPrice(sym);
       const display = current !== null ? formatCurrency(current) : '—';
       options += `<option value="${sym}">${sym} (actual: ${display})</option>`;
-    });
+    }
 
-    // Esperar a que se construyan todas las opciones
-    setTimeout(() => {
-      const form = `
-        <div class="form-group">
-          <label>Símbolo:</label>
-          <select id="manualSymbol">${options}</select>
-        </div>
-        <div class="form-group">
-          <label>Precio actual (€):</label>
-          <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
-        </div>
-        <button id="btnSetManualPrice">Establecer Precio</button>
-      `;
-      openModal('Actualizar Precio Manualmente', form);
+    const form = `
+      <div class="form-group">
+        <label>Símbolo:</label>
+        <select id="manualSymbol">${options}</select>
+      </div>
+      <div class="form-group">
+        <label>Precio actual (€):</label>
+        <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
+      </div>
+      <button id="btnSetManualPrice">Establecer Precio</button>
+    `;
+    openModal('Actualizar Precio Manualmente', form);
 
-      document.getElementById('btnSetManualPrice').onclick = async () => {
-        const symbol = document.getElementById('manualSymbol').value;
-        const priceStr = document.getElementById('manualPrice').value;
-        const price = parseFloat(priceStr.replace(',', '.'));
+    document.getElementById('btnSetManualPrice').onclick = async () => {
+      const symbol = document.getElementById('manualSymbol').value;
+      const priceStr = document.getElementById('manualPrice').value;
+      const price = parseFloat(priceStr.replace(',', '.'));
 
-        if (isNaN(price) || price <= 0) {
-          alert('Introduce un precio válido.');
-          return;
-        }
+      if (isNaN(price) || price <= 0) {
+        alert('Introduce un precio válido.');
+        return;
+      }
 
-        await saveCurrentPrice(symbol, price);
-        closeModal();
-        renderPortfolioSummary();
-        showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
-      };
-    }, 100);
+      await saveCurrentPrice(symbol, price);
+      closeModal();
+      renderPortfolioSummary(); // Refrescar inmediatamente
+      showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+    };
   });
 }
 
@@ -719,32 +703,37 @@ function showImportExport() {
   };
 }
 
-// --- Inicialización con botones de menú ---
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  // Añadir opción "Actualizar Precio Manualmente" al menú
-  const menu = document.getElementById('mainMenu');
-  if (menu) {
-    const manualBtn = document.createElement('button');
-    manualBtn.dataset.action = 'manual-price';
-    manualBtn.innerHTML = '✏️ Actualizar Precio Manual';
-    menu.appendChild(manualBtn);
-  }
+  // Reemplazar botones por menú desplegable
+  const header = document.querySelector('header');
+  const menuSelect = document.createElement('select');
+  menuSelect.id = 'mainMenu';
+  menuSelect.innerHTML = `
+    <option value="">— Menú —</option>
+    <option value="add-transaction">➕ Añadir Transacción</option>
+    <option value="view-transactions">📋 Transacciones</option>
+    <option value="add-dividend">💰 Añadir Dividendo</option>
+    <option value="view-dividends">📊 Dividendos</option>
+    <option value="manual-price">✏️ Actualizar Precio Manual</option>
+    <option value="import-export">📤 Exportar / Importar</option>
+    <option value="refresh-prices">🔄 Actualizar Precios</option>
+  `;
+  header.appendChild(menuSelect);
 
-  document.querySelectorAll('#mainMenu button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = btn.dataset.action;
-      switch (action) {
-        case 'add-transaction': showAddTransactionForm(); break;
-        case 'view-transactions': showTransactionsList(); break;
-        case 'add-dividend': showAddDividendForm(); break;
-        case 'view-dividends': showDividendsList(); break;
-        case 'import-export': showImportExport(); break;
-        case 'refresh-prices': refreshPrices(); break;
-        case 'manual-price': showManualPriceUpdate(); break;
-      }
-    });
+  document.getElementById('mainMenu').addEventListener('change', function () {
+    const action = this.value;
+    this.selectedIndex = 0;
+    switch (action) {
+      case 'add-transaction': showAddTransactionForm(); break;
+      case 'view-transactions': showTransactionsList(); break;
+      case 'add-dividend': showAddDividendForm(); break;
+      case 'view-dividends': showDividendsList(); break;
+      case 'manual-price': showManualPriceUpdate(); break;
+      case 'import-export': showImportExport(); break;
+      case 'refresh-prices': refreshPrices(); break;
+    }
   });
 
   if ('serviceWorker' in navigator) {
