@@ -277,7 +277,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-    }
+}
 
 function showAddTransactionForm() {
   const form = `
@@ -462,7 +462,7 @@ async function showTransactionsList() {
       };
     }
   };
-    }
+      }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -482,7 +482,7 @@ async function showAddDividendForm() {
     </div>
     <div class="form-group">
       <label>Dividendo por acción (€):</label>
-      <input type="number" id="divPerShare" step="any" min="0" placeholder="0.25" />
+      <input type="number" id="divPerShare" step="any" min="0" />
     </div>
     <div class="form-group">
       <label>Total (€):</label>
@@ -622,7 +622,7 @@ function showManualPriceUpdate() {
       </div>
       <div class="form-group">
         <label>Precio actual (€):</label>
-        <input type="number" id="manualPrice" step="any" min="0" placeholder="Ej. 150.25" />
+        <input type="number" id="manualPrice" step="any" min="0" />
       </div>
       <button id="btnSetManualPrice" class="btn-primary">Establecer Precio</button>
     `;
@@ -639,8 +639,8 @@ function showManualPriceUpdate() {
       }
 
       await saveCurrentPrice(symbol, price);
-      closeModal();
-      renderPortfolioSummary();
+      document.getElementById('modalOverlay').style.display = 'none';
+      await renderPortfolioSummary(); // ✅ Actualiza inmediatamente
       showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
     };
   });
