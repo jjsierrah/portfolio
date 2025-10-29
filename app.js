@@ -245,7 +245,7 @@ async function renderPortfolioSummary() {
 }
 
 function openModal(title, content) {
-  // Crear overlay si no existe
+  // Asegurar que el overlay exista
   let overlay = document.getElementById('modalOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -254,39 +254,30 @@ function openModal(title, content) {
     document.body.appendChild(overlay);
   }
 
-  // Crear contenido si no existe
-  let modalContent = document.getElementById('modalContent');
-  if (!modalContent) {
-    modalContent = document.createElement('div');
-    modalContent.id = 'modalContent';
-    modalContent.className = 'modal-content';
-    overlay.appendChild(modalContent);
-  }
-
-  modalContent.innerHTML = `
-    <div class="modal-header">
-      <h3>${title}</h3>
-      <button class="close-modal">&times;</button>
-    </div>
-    <div class="modal-body">
-      ${content}
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${title}</h3>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        ${content}
+      </div>
     </div>
   `;
 
   overlay.style.display = 'flex';
 
-  // Cerrar al hacer clic en la X
-  document.querySelector('.close-modal').onclick = () => {
+  // Cerrar modal
+  const closeModal = () => {
     overlay.style.display = 'none';
   };
 
-  // Cerrar al hacer clic fuera del contenido
+  document.querySelector('.close-modal').onclick = closeModal;
   overlay.onclick = (e) => {
-    if (e.target === overlay) {
-      overlay.style.display = 'none';
-    }
+    if (e.target === overlay) closeModal();
   };
-}
+    }
 
 function showAddTransactionForm() {
   const form = `
