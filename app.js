@@ -609,7 +609,7 @@ function showManualPriceUpdate() {
 
       await saveCurrentPrice(symbol, price);
       closeModal();
-      renderPortfolioSummary(); // Refrescar inmediatamente
+      await renderPortfolioSummary(); // Actualiza inmediatamente
       showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
     };
   });
@@ -706,8 +706,12 @@ function showImportExport() {
 document.addEventListener('DOMContentLoaded', () => {
   renderPortfolioSummary();
 
-  // Reemplazar botones por menú desplegable
+  // Eliminar cualquier menú anterior y crear solo el select
   const header = document.querySelector('header');
+  // Eliminar botones anteriores si existen
+  const oldMenu = document.getElementById('mainMenu');
+  if (oldMenu) oldMenu.remove();
+
   const menuSelect = document.createElement('select');
   menuSelect.id = 'mainMenu';
   menuSelect.innerHTML = `
