@@ -63,7 +63,6 @@ function showToast(message) {
 
 // --- Modal de confirmación personalizado ---
 function showConfirm(message, onConfirm) {
-  // Cerrar cualquier modal abierto
   const mainOverlay = document.getElementById('modalOverlay');
   if (mainOverlay) mainOverlay.style.display = 'none';
 
@@ -169,17 +168,17 @@ async function saveCurrentPrice(symbol, price) {
 }
 
 async function renderPortfolioSummary() {
+  const summaryTotals = document.getElementById('summary-totals');
+  const summaryByType = document.getElementById('summary-by-type');
+  
+  if (!summaryTotals || !summaryByType) {
+    console.error('Elementos del DOM no encontrados');
+    return;
+  }
+
   try {
     const transactions = await db.transactions.toArray();
-    const summaryTotals = document.getElementById('summary-totals');
-    const summaryByType = document.getElementById('summary-by-type');
     
-    // Protección: si los elementos no existen, salir
-    if (!summaryTotals || !summaryByType) {
-      console.warn('Elementos del DOM no encontrados. ¿Se ha cargado el HTML?');
-      return;
-    }
-
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
@@ -279,11 +278,9 @@ async function renderPortfolioSummary() {
     }
     summaryByType.innerHTML = groupsHtml;
   } catch (err) {
-    console.error('Error en renderPortfolioSummary:', err);
-    const summaryTotals = document.getElementById('summary-totals');
-    if (summaryTotals) {
-      summaryTotals.innerHTML = '<p>Error al cargar los datos. Prueba a recargar.</p>';
-    }
+    console.error('Error crítico en renderPortfolioSummary:', err);
+    summaryTotals.innerHTML = '<p style="color:red">⚠️ Error al cargar el portfolio. Abre la consola para más detalles.</p>';
+    summaryByType.innerHTML = '';
   }
 }
 
@@ -424,7 +421,6 @@ async function showTransactionsList() {
   }
   openModal('Transacciones', html);
 
-  // --- Manejo directo de clics en el cuerpo del modal ---
   const modalBody = document.querySelector('#modalOverlay .modal-body');
   modalBody.onclick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
@@ -436,74 +432,75 @@ async function showTransactionsList() {
     }
     if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
-      const tx = await db.transactions.get(id);
-      if (!tx) return;
+      db.transactions.get(id).then((tx) => {
+        if (!tx) return;
 
-      const form = `
-        <div class="form-group">
-          <label>Tipo:</label>
-          <select id="editTxType">
-            <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
-            <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Tipo activo:</label>
-          <select id="editAssetType">
-            <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
-            <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
-            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Símbolo:</label>
-          <input type="text" id="editSymbol" value="${tx.symbol}" required />
-        </div>
-        <div class="form-group">
-          <label>Nombre:</label>
-          <input type="text" id="editName" value="${tx.name || ''}" />
-        </div>
-        <div class="form-group">
-          <label>Cantidad:</label>
-          <input type="number" id="editQuantity" value="${tx.quantity}" required />
-        </div>
-        <div class="form-group">
-          <label>Precio (€):</label>
-          <input type="number" id="editPrice" value="${tx.buyPrice}" required />
-        </div>
-        <div class="form-group">
-          <label>Comisión (€):</label>
-          <input type="number" id="editCommission" value="${tx.commission || 0}" />
-        </div>
-        <div class="form-group">
-          <label>Fecha:</label>
-          <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
-        </div>
-        <button id="btnUpdateTx" class="btn-primary">Guardar</button>
-      `;
-      openModal('Editar Transacción', form);
+        const form = `
+          <div class="form-group">
+            <label>Tipo:</label>
+            <select id="editTxType">
+              <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
+              <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tipo activo:</label>
+            <select id="editAssetType">
+              <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
+              <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
+              <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Símbolo:</label>
+            <input type="text" id="editSymbol" value="${tx.symbol}" required />
+          </div>
+          <div class="form-group">
+            <label>Nombre:</label>
+            <input type="text" id="editName" value="${tx.name || ''}" />
+          </div>
+          <div class="form-group">
+            <label>Cantidad:</label>
+            <input type="number" id="editQuantity" value="${tx.quantity}" required />
+          </div>
+          <div class="form-group">
+            <label>Precio (€):</label>
+            <input type="number" id="editPrice" value="${tx.buyPrice}" required />
+          </div>
+          <div class="form-group">
+            <label>Comisión (€):</label>
+            <input type="number" id="editCommission" value="${tx.commission || 0}" />
+          </div>
+          <div class="form-group">
+            <label>Fecha:</label>
+            <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
+          </div>
+          <button id="btnUpdateTx" class="btn-primary">Guardar</button>
+        `;
+        openModal('Editar Transacción', form);
 
-      document.getElementById('btnUpdateTx').onclick = async () => {
-        const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
-        const name = document.getElementById('editName').value.trim();
-        const assetType = document.getElementById('editAssetType').value;
-        const quantity = parseFloat(document.getElementById('editQuantity').value);
-        const price = parseFloat(document.getElementById('editPrice').value);
-        const commission = parseFloat(document.getElementById('editCommission').value) || 0;
-        const type = document.getElementById('editTxType').value;
-        const buyDate = document.getElementById('editBuyDate').value;
+        document.getElementById('btnUpdateTx').onclick = async () => {
+          const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
+          const name = document.getElementById('editName').value.trim();
+          const assetType = document.getElementById('editAssetType').value;
+          const quantity = parseFloat(document.getElementById('editQuantity').value);
+          const price = parseFloat(document.getElementById('editPrice').value);
+          const commission = parseFloat(document.getElementById('editCommission').value) || 0;
+          const type = document.getElementById('editTxType').value;
+          const buyDate = document.getElementById('editBuyDate').value;
 
-        if (!symbol || isNaN(quantity) || isNaN(price)) {
-          showToast('Datos inválidos.');
-          return;
-        }
+          if (!symbol || isNaN(quantity) || isNaN(price)) {
+            showToast('Datos inválidos.');
+            return;
+          }
 
-        await db.transactions.update(id, {
-          symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
-        });
-        document.getElementById('modalOverlay').style.display = 'none';
-        showTransactionsList();
-      };
+          await db.transactions.update(id, {
+            symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
+          });
+          document.getElementById('modalOverlay').style.display = 'none';
+          showTransactionsList();
+        };
+      });
     }
   };
 }
@@ -780,7 +777,6 @@ function showImportExport() {
 
 // --- Inicialización segura ---
 document.addEventListener('DOMContentLoaded', () => {
-  // Abrir base de datos y renderizar
   db.open().catch(err => {
     console.error('Error al abrir la base de datos:', err);
     const summaryTotals = document.getElementById('summary-totals');
@@ -791,7 +787,6 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPortfolioSummary();
   });
 
-  // Configurar menú
   const mainMenu = document.getElementById('mainMenu');
   if (mainMenu) {
     mainMenu.addEventListener('change', function () {
