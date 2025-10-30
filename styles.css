@@ -198,9 +198,7 @@ h2 {
   background: #d32f2f;
 }
 
-/* Botones pequeños en listas */
-.asset-item .edit-btn,
-.asset-item .delete-btn,
+/* Botones pequeños en listas — CORREGIDO */
 .asset-item .btn-edit,
 .asset-item .btn-delete {
   width: auto;
