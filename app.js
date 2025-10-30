@@ -42,9 +42,10 @@ function showToast(message) {
     transform: translateX(-50%);
     background: #4CAF50;
     color: white;
-    padding: 12px 20px;
-    border-radius: 8px;
+    padding: 14px 22px;
+    border-radius: 10px;
     font-weight: bold;
+    font-size: 1.05rem;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     z-index: 10000;
     max-width: 90%;
@@ -73,8 +74,8 @@ function showConfirm(message, onConfirm) {
       <div class="modal-body" style="text-align: center; padding: 24px;">
         <p>${message}</p>
         <div class="modal-actions" style="margin-top: 20px; justify-content: center;">
-          <button id="confirmNo" class="btn-delete" style="width: auto; padding: 8px 16px;">No</button>
-          <button id="confirmYes" class="btn-primary" style="width: auto; padding: 8px 16px; margin-left: 8px;">Sí</button>
+          <button id="confirmNo" class="btn-delete" style="width: auto; padding: 10px 16px;">No</button>
+          <button id="confirmYes" class="btn-primary" style="width: auto; padding: 10px 16px; margin-left: 8px;">Sí</button>
         </div>
       </div>
     </div>
@@ -180,6 +181,9 @@ async function renderPortfolioSummary() {
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
+      // Eliminar gráfico si existe
+      const chart = summaryTotals.nextElementSibling;
+      if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
       return;
     }
 
@@ -245,8 +249,9 @@ async function renderPortfolioSummary() {
         </div>
       </div>
     `;
-    summaryTotals.innerHTML = totalsHtml;
 
+    // --- GRÁFICO DE COMPOSICIÓN ---
+    const total = totalCurrentValue;
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
       if (asset.totalQuantity > 0) {
@@ -254,6 +259,44 @@ async function renderPortfolioSummary() {
       }
     });
 
+    let chartHtml = '';
+    if (total > 0) {
+      const groupShares = {
+        stock: groups.stock.reduce((sum, a) => sum + a.currentValue, 0),
+        etf: groups.etf.reduce((sum, a) => sum + a.currentValue, 0),
+        crypto: groups.crypto.reduce((sum, a) => sum + a.currentValue, 0)
+      };
+      chartHtml = '<div class="portfolio-chart"><div class="chart-title">Composición de tu portfolio</div>';
+      const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' };
+      const colors = { stock: '#4CAF50', etf: '#2196F3', crypto: '#FF9800' };
+      
+      for (const [type, value] of Object.entries(groupShares)) {
+        if (value > 0) {
+          const pct = (value / total) * 100;
+          chartHtml += `
+            <div class="chart-bar">
+              <div class="bar-label">${typeNames[type]}: ${formatPercent(pct / 100)}</div>
+              <div class="bar-container">
+                <div class="bar-fill" style="width:${pct}%; background-color:${colors[type]};"></div>
+              </div>
+            </div>
+          `;
+        }
+      }
+      chartHtml += '</div>';
+    }
+
+    // Renderizar totales y gráfico
+    summaryTotals.innerHTML = totalsHtml;
+    const existingChart = summaryTotals.nextElementSibling;
+    if (existingChart && existingChart.classList.contains('portfolio-chart')) {
+      existingChart.remove();
+    }
+    if (chartHtml) {
+      summaryTotals.insertAdjacentHTML('afterend', chartHtml);
+    }
+
+    // --- TARJETAS POR TIPO ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
@@ -261,14 +304,17 @@ async function renderPortfolioSummary() {
       groupsHtml += `<div class="group-title">${typeName}</div>`;
       for (const a of list) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
+        const gainIcon = a.gain >= 0 ? '📈' : '📉';
+        const gainColor = a.gain >= 0 ? 'green' : 'red';
+        const typeClass = type;
         groupsHtml += `
-          <div class="asset-item">
+          <div class="asset-item ${typeClass}">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Cantidad: ${a.totalQuantity} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
             Actual: ${formatCurrency(a.currentValue)} | 
-            Ganancia: <span style="color:${a.gain >= 0 ? 'green' : 'red'}">
-              ${a.gain >= 0 ? '+' : ''}${formatCurrency(a.gain)} (${formatPercent(gainPct)})
+            Ganancia: <span style="color:${gainColor}; font-weight:bold;">
+              ${gainIcon} ${a.gain >= 0 ? '+' : ''}${formatCurrency(a.gain)} (${formatPercent(gainPct)})
             </span>
           </div>
         `;
@@ -278,6 +324,8 @@ async function renderPortfolioSummary() {
   } catch (err) {
     summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
     summaryByType.innerHTML = '';
+    const chart = summaryTotals.nextElementSibling;
+    if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
   }
 }
 
@@ -500,7 +548,7 @@ async function showTransactionsList() {
       });
     }
   };
-}
+      }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
