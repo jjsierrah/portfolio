@@ -1,4 +1,4 @@
-no* {
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -72,7 +72,7 @@ h2 {
   border-bottom: none;
 }
 
-/* --- MODALES CORREGIDAS --- */
+/* --- MODALES --- */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -164,8 +164,12 @@ h2 {
   box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
-/* Botones */
-.btn-primary {
+/* --- BOTONES UNIVERSALES --- */
+.btn-primary,
+.edit-btn,
+.delete-btn,
+.btn-edit,
+.btn-delete {
   background: #1a73e8;
   color: white;
   border: none;
@@ -178,29 +182,32 @@ h2 {
   margin-top: 8px;
 }
 
-.btn-primary:hover {
+.btn-primary:hover,
+.edit-btn:hover,
+.btn-edit:hover {
   background: #1557b0;
 }
 
-.btn-edit {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  margin-right: 8px;
-}
-
+.delete-btn,
 .btn-delete {
   background: #f44336;
-  color: white;
-  border: none;
-  border-radius: 6px;
+}
+
+.delete-btn:hover,
+.btn-delete:hover {
+  background: #d32f2f;
+}
+
+/* Botones pequeños en listas */
+.asset-item .edit-btn,
+.asset-item .delete-btn,
+.asset-item .btn-edit,
+.asset-item .btn-delete {
+  width: auto;
   padding: 6px 12px;
   font-size: 0.85rem;
-  cursor: pointer;
+  margin-top: 8px;
+  margin-right: 6px;
 }
 
 .modal-actions {
@@ -221,25 +228,4 @@ h2 {
   margin-top: 20px;
   padding-top: 15px;
   border-top: 1px solid #eee;
-  }
-/* Botones en modales */
-.btn-edit, .btn-delete {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  margin-right: 8px;
 }
-
-.btn-delete {
-  background: #f44336;
-}
-
-.modal-actions {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
-  }
