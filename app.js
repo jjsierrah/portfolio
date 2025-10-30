@@ -335,7 +335,7 @@ function showAddTransactionForm() {
     const buyDate = document.getElementById('buyDate').value;
 
     if (!symbol || isNaN(quantity) || isNaN(price)) {
-      alert('Completa todos los campos obligatorios.');
+      showToast('Completa todos los campos obligatorios.');
       return;
     }
 
@@ -450,7 +450,7 @@ async function showTransactionsList() {
         const buyDate = document.getElementById('editBuyDate').value;
 
         if (!symbol || isNaN(quantity) || isNaN(price)) {
-          alert('Datos inválidos.');
+          showToast('Datos inválidos.');
           return;
         }
 
@@ -462,11 +462,11 @@ async function showTransactionsList() {
       };
     }
   };
-      }
+    }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
-    alert('Añade una transacción primero.');
+    showToast('Añade una transacción primero.');
     return;
   }
 
@@ -528,7 +528,7 @@ async function showAddDividendForm() {
     const date = document.getElementById('divDate').value;
 
     if (isNaN(perShare) || perShare <= 0) {
-      alert('Dividendo por acción inválido.');
+      showToast('Dividendo por acción inválido.');
       return;
     }
 
@@ -575,7 +575,7 @@ async function showDividendsList() {
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
-    alert('No hay transacciones.');
+    showToast('No hay transacciones.');
     return;
   }
 
@@ -597,13 +597,13 @@ async function refreshPrices() {
   }
 
   renderPortfolioSummary();
-  alert(`Precios actualizados: ${updated}/${symbols.length}`);
+  showToast(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
 function showManualPriceUpdate() {
   db.transactions.toArray().then(async (txs) => {
     if (txs.length === 0) {
-      alert('No hay transacciones.');
+      showToast('No hay transacciones.');
       return;
     }
 
@@ -634,13 +634,13 @@ function showManualPriceUpdate() {
       const price = parseFloat(priceStr.replace(',', '.'));
 
       if (isNaN(price) || price <= 0) {
-        alert('Introduce un precio válido.');
+        showToast('Introduce un precio válido.');
         return;
       }
 
       await saveCurrentPrice(symbol, price);
       document.getElementById('modalOverlay').style.display = 'none';
-      await renderPortfolioSummary(); // ✅ Actualiza inmediatamente
+      await renderPortfolioSummary();
       showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
     };
   });
@@ -717,11 +717,11 @@ function showImportExport() {
         
         closeModal();
         renderPortfolioSummary();
-        alert('✅ Datos importados correctamente.');
+        showToast('✅ Datos importados correctamente.');
         
       } catch (err) {
         console.error('Error en importación:', err);
-        alert('❌ Error: archivo no válido o corrupto.');
+        showToast('❌ Error: archivo no válido o corrupto.');
       } finally {
         if (input.parentNode) {
           input.parentNode.removeChild(input);
