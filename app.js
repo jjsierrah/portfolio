@@ -70,8 +70,12 @@ function showToast(message) {
   }, 3000);
 }
 
-// --- NUEVO: Modal de confirmación personalizado (evita "jjsierrah.github.io dice") ---
+// --- Modal de confirmación personalizado ---
 function showConfirm(message, onConfirm) {
+  // Cerrar cualquier modal abierto
+  const mainOverlay = document.getElementById('modalOverlay');
+  if (mainOverlay) mainOverlay.style.display = 'none';
+
   const overlay = document.createElement('div');
   overlay.id = 'confirmOverlay';
   overlay.className = 'modal-overlay';
@@ -94,6 +98,7 @@ function showConfirm(message, onConfirm) {
 
   const cleanup = () => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    // Reabrir el modal anterior si es necesario (opcional, no lo hacemos aquí)
   };
 
   btnYes.onclick = () => {
@@ -260,7 +265,6 @@ async function renderPortfolioSummary() {
       groupsHtml += `<div class="group-title">${typeName}</div>`;
       for (const a of list) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
-        // CORREGIDO: nombre se muestra tal como se escribió (sin toUpperCase)
         groupsHtml += `
           <div class="asset-item">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
@@ -282,7 +286,6 @@ async function renderPortfolioSummary() {
 }
 
 function openModal(title, content) {
-  // Asegurar que el overlay exista
   let overlay = document.getElementById('modalOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -305,7 +308,6 @@ function openModal(title, content) {
 
   overlay.style.display = 'flex';
 
-  // Cerrar modal
   const closeModal = () => {
     overlay.style.display = 'none';
   };
@@ -405,7 +407,6 @@ async function showTransactionsList() {
     const typeLabel = t.type === 'buy' ? 'Compra' : 'Venta';
     const typeColor = t.type === 'buy' ? '#4CAF50' : '#f44336';
     const totalAmount = t.quantity * t.buyPrice;
-    // CORREGIDO: nombre sin toUpperCase
     html += `
       <div class="asset-item">
         <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
@@ -421,92 +422,88 @@ async function showTransactionsList() {
   }
   openModal('Transacciones', html);
 
-  const overlay = document.getElementById('modalOverlay');
-  const handleClick = (e) => {
+  // --- Manejo directo de clics en el cuerpo del modal (sin listeners persistentes) ---
+  const modalBody = document.querySelector('#modalOverlay .modal-body');
+  modalBody.onclick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
       const id = parseInt(e.target.dataset.id);
       showConfirm('¿Eliminar esta transacción?', async () => {
         await db.transactions.delete(id);
-        showTransactionsList();
+        showTransactionsList(); // vuelve a abrir la lista actualizada
       });
     }
     if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
-      db.transactions.get(id).then((tx) => {
-        if (!tx) return;
+      const tx = await db.transactions.get(id);
+      if (!tx) return;
 
-        const form = `
-          <div class="form-group">
-            <label>Tipo:</label>
-            <select id="editTxType">
-              <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
-              <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Tipo activo:</label>
-            <select id="editAssetType">
-              <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
-              <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
-              <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Símbolo:</label>
-            <input type="text" id="editSymbol" value="${tx.symbol}" required />
-          </div>
-          <div class="form-group">
-            <label>Nombre:</label>
-            <input type="text" id="editName" value="${tx.name || ''}" />
-          </div>
-          <div class="form-group">
-            <label>Cantidad:</label>
-            <input type="number" id="editQuantity" value="${tx.quantity}" required />
-          </div>
-          <div class="form-group">
-            <label>Precio (€):</label>
-            <input type="number" id="editPrice" value="${tx.buyPrice}" required />
-          </div>
-          <div class="form-group">
-            <label>Comisión (€):</label>
-            <input type="number" id="editCommission" value="${tx.commission || 0}" />
-          </div>
-          <div class="form-group">
-            <label>Fecha:</label>
-            <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
-          </div>
-          <button id="btnUpdateTx" class="btn-primary">Guardar</button>
-        `;
-        openModal('Editar Transacción', form);
+      const form = `
+        <div class="form-group">
+          <label>Tipo:</label>
+          <select id="editTxType">
+            <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
+            <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tipo activo:</label>
+          <select id="editAssetType">
+            <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
+            <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
+            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <input type="text" id="editSymbol" value="${tx.symbol}" required />
+        </div>
+        <div class="form-group">
+          <label>Nombre:</label>
+          <input type="text" id="editName" value="${tx.name || ''}" />
+        </div>
+        <div class="form-group">
+          <label>Cantidad:</label>
+          <input type="number" id="editQuantity" value="${tx.quantity}" required />
+        </div>
+        <div class="form-group">
+          <label>Precio (€):</label>
+          <input type="number" id="editPrice" value="${tx.buyPrice}" required />
+        </div>
+        <div class="form-group">
+          <label>Comisión (€):</label>
+          <input type="number" id="editCommission" value="${tx.commission || 0}" />
+        </div>
+        <div class="form-group">
+          <label>Fecha:</label>
+          <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
+        </div>
+        <button id="btnUpdateTx" class="btn-primary">Guardar</button>
+      `;
+      openModal('Editar Transacción', form);
 
-        document.getElementById('btnUpdateTx').onclick = async () => {
-          const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
-          const name = document.getElementById('editName').value.trim();
-          const assetType = document.getElementById('editAssetType').value;
-          const quantity = parseFloat(document.getElementById('editQuantity').value);
-          const price = parseFloat(document.getElementById('editPrice').value);
-          const commission = parseFloat(document.getElementById('editCommission').value) || 0;
-          const type = document.getElementById('editTxType').value;
-          const buyDate = document.getElementById('editBuyDate').value;
+      document.getElementById('btnUpdateTx').onclick = async () => {
+        const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
+        const name = document.getElementById('editName').value.trim();
+        const assetType = document.getElementById('editAssetType').value;
+        const quantity = parseFloat(document.getElementById('editQuantity').value);
+        const price = parseFloat(document.getElementById('editPrice').value);
+        const commission = parseFloat(document.getElementById('editCommission').value) || 0;
+        const type = document.getElementById('editTxType').value;
+        const buyDate = document.getElementById('editBuyDate').value;
 
-          if (!symbol || isNaN(quantity) || isNaN(price)) {
-            showToast('Datos inválidos.');
-            return;
-          }
+        if (!symbol || isNaN(quantity) || isNaN(price)) {
+          showToast('Datos inválidos.');
+          return;
+        }
 
-          await db.transactions.update(id, {
-            symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
-          });
-          document.getElementById('modalOverlay').style.display = 'none';
-          showTransactionsList();
-        };
-      });
+        await db.transactions.update(id, {
+          symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
+        });
+        document.getElementById('modalOverlay').style.display = 'none';
+        showTransactionsList();
+      };
     }
   };
-
-  // Eliminar listener anterior si existe (evitar duplicados)
-  overlay.removeEventListener('click', handleClick);
-  overlay.addEventListener('click', handleClick);
 }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
@@ -607,8 +604,8 @@ async function showDividendsList() {
   html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
   openModal('Dividendos', html);
 
-  const overlay = document.getElementById('modalOverlay');
-  const handleClick = (e) => {
+  const modalBody = document.querySelector('#modalOverlay .modal-body');
+  modalBody.onclick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
       const id = parseInt(e.target.dataset.id);
       showConfirm('¿Eliminar este dividendo?', async () => {
@@ -617,9 +614,6 @@ async function showDividendsList() {
       });
     }
   };
-
-  overlay.removeEventListener('click', handleClick);
-  overlay.addEventListener('click', handleClick);
 }
 
 async function refreshPrices() {
@@ -730,7 +724,6 @@ function showImportExport() {
   };
 
   document.getElementById('btnImport').onclick = async () => {
-    // Usar confirmación personalizada
     showConfirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?', async () => {
       const input = document.createElement('input');
       input.type = 'file';
@@ -785,7 +778,6 @@ function showImportExport() {
 
 // --- Inicialización segura ---
 document.addEventListener('DOMContentLoaded', () => {
-  // Esperar a que Dexie esté listo
   db.open().then(() => {
     renderPortfolioSummary();
   }).catch(err => {
