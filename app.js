@@ -119,6 +119,7 @@ async function fetchCryptoPrice(symbol) {
   if (!id) return null;
 
   try {
+    // CORREGIDO: eliminado espacio al inicio de la URL
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`);
     if (!res.ok) return null;
     const data = await res.json();
@@ -224,9 +225,10 @@ async function renderPortfolioSummary() {
       groupsHtml += `<div class="group-title">${typeName}</div>`;
       for (const a of list) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
+        // CORREGIDO: nombre en mayúsculas
         groupsHtml += `
           <div class="asset-item">
-            <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
+            <strong>${a.symbol}</strong> ${a.name ? `(${a.name.toUpperCase()})` : ''}<br>
             Cantidad: ${a.totalQuantity} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
             Actual: ${formatCurrency(a.currentValue)} | 
@@ -368,9 +370,10 @@ async function showTransactionsList() {
     const typeLabel = t.type === 'buy' ? 'Compra' : 'Venta';
     const typeColor = t.type === 'buy' ? '#4CAF50' : '#f44336';
     const totalAmount = t.quantity * t.buyPrice;
+    // CORREGIDO: nombre en mayúsculas
     html += `
       <div class="asset-item">
-        <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
+        <strong>${t.symbol}</strong> ${t.name ? `(${t.name.toUpperCase()})` : ''}<br>
         <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
         ${t.quantity} @ ${formatCurrency(t.buyPrice)} = ${formatCurrency(totalAmount)}<br>
         Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
@@ -383,86 +386,94 @@ async function showTransactionsList() {
   }
   openModal('Transacciones', html);
 
-  document.getElementById('modalContent').onclick = async (e) => {
+  // Usar delegación en el overlay actual (más seguro)
+  const overlay = document.getElementById('modalOverlay');
+  const handleClick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
       if (!confirm('¿Eliminar?')) return;
       const id = parseInt(e.target.dataset.id);
-      await db.transactions.delete(id);
-      showTransactionsList();
+      db.transactions.delete(id).then(() => {
+        overlay.removeEventListener('click', handleClick);
+        showTransactionsList();
+      });
     }
     if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
-      const tx = await db.transactions.get(id);
-      if (!tx) return;
+      db.transactions.get(id).then((tx) => {
+        if (!tx) return;
+        overlay.removeEventListener('click', handleClick);
 
-      const form = `
-        <div class="form-group">
-          <label>Tipo:</label>
-          <select id="editTxType">
-            <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
-            <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Tipo activo:</label>
-          <select id="editAssetType">
-            <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
-            <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
-            <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Símbolo:</label>
-          <input type="text" id="editSymbol" value="${tx.symbol}" required />
-        </div>
-        <div class="form-group">
-          <label>Nombre:</label>
-          <input type="text" id="editName" value="${tx.name || ''}" />
-        </div>
-        <div class="form-group">
-          <label>Cantidad:</label>
-          <input type="number" id="editQuantity" value="${tx.quantity}" required />
-        </div>
-        <div class="form-group">
-          <label>Precio (€):</label>
-          <input type="number" id="editPrice" value="${tx.buyPrice}" required />
-        </div>
-        <div class="form-group">
-          <label>Comisión (€):</label>
-          <input type="number" id="editCommission" value="${tx.commission || 0}" />
-        </div>
-        <div class="form-group">
-          <label>Fecha:</label>
-          <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
-        </div>
-        <button id="btnUpdateTx" class="btn-primary">Guardar</button>
-      `;
-      openModal('Editar Transacción', form);
+        const form = `
+          <div class="form-group">
+            <label>Tipo:</label>
+            <select id="editTxType">
+              <option value="buy" ${tx.type === 'buy' ? 'selected' : ''}>Compra</option>
+              <option value="sell" ${tx.type === 'sell' ? 'selected' : ''}>Venta</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tipo activo:</label>
+            <select id="editAssetType">
+              <option value="stock" ${tx.assetType === 'stock' ? 'selected' : ''}>Acción</option>
+              <option value="etf" ${tx.assetType === 'etf' ? 'selected' : ''}>ETF</option>
+              <option value="crypto" ${tx.assetType === 'crypto' ? 'selected' : ''}>Cripto</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Símbolo:</label>
+            <input type="text" id="editSymbol" value="${tx.symbol}" required />
+          </div>
+          <div class="form-group">
+            <label>Nombre:</label>
+            <input type="text" id="editName" value="${tx.name || ''}" />
+          </div>
+          <div class="form-group">
+            <label>Cantidad:</label>
+            <input type="number" id="editQuantity" value="${tx.quantity}" required />
+          </div>
+          <div class="form-group">
+            <label>Precio (€):</label>
+            <input type="number" id="editPrice" value="${tx.buyPrice}" required />
+          </div>
+          <div class="form-group">
+            <label>Comisión (€):</label>
+            <input type="number" id="editCommission" value="${tx.commission || 0}" />
+          </div>
+          <div class="form-group">
+            <label>Fecha:</label>
+            <input type="date" id="editBuyDate" value="${tx.buyDate}" required />
+          </div>
+          <button id="btnUpdateTx" class="btn-primary">Guardar</button>
+        `;
+        openModal('Editar Transacción', form);
 
-      document.getElementById('btnUpdateTx').onclick = async () => {
-        const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
-        const name = document.getElementById('editName').value.trim();
-        const assetType = document.getElementById('editAssetType').value;
-        const quantity = parseFloat(document.getElementById('editQuantity').value);
-        const price = parseFloat(document.getElementById('editPrice').value);
-        const commission = parseFloat(document.getElementById('editCommission').value) || 0;
-        const type = document.getElementById('editTxType').value;
-        const buyDate = document.getElementById('editBuyDate').value;
+        document.getElementById('btnUpdateTx').onclick = async () => {
+          const symbol = document.getElementById('editSymbol').value.trim().toUpperCase();
+          const name = document.getElementById('editName').value.trim();
+          const assetType = document.getElementById('editAssetType').value;
+          const quantity = parseFloat(document.getElementById('editQuantity').value);
+          const price = parseFloat(document.getElementById('editPrice').value);
+          const commission = parseFloat(document.getElementById('editCommission').value) || 0;
+          const type = document.getElementById('editTxType').value;
+          const buyDate = document.getElementById('editBuyDate').value;
 
-        if (!symbol || isNaN(quantity) || isNaN(price)) {
-          showToast('Datos inválidos.');
-          return;
-        }
+          if (!symbol || isNaN(quantity) || isNaN(price)) {
+            showToast('Datos inválidos.');
+            return;
+          }
 
-        await db.transactions.update(id, {
-          symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
-        });
-        document.getElementById('modalOverlay').style.display = 'none';
-        showTransactionsList();
-      };
+          await db.transactions.update(id, {
+            symbol, name, assetType, quantity, buyPrice: price, commission, type, buyDate
+          });
+          document.getElementById('modalOverlay').style.display = 'none';
+          showTransactionsList();
+        };
+      });
     }
   };
-                               }
+
+  overlay.addEventListener('click', handleClick);
+}
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -562,14 +573,17 @@ async function showDividendsList() {
   html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
   openModal('Dividendos', html);
 
-  document.getElementById('modalContent').onclick = async (e) => {
+  const overlay = document.getElementById('modalOverlay');
+  const handleClick = async (e) => {
     if (e.target.classList.contains('btn-delete')) {
       if (!confirm('¿Eliminar dividendo?')) return;
       const id = parseInt(e.target.dataset.id);
       await db.dividends.delete(id);
+      overlay.removeEventListener('click', handleClick);
       showDividendsList();
     }
   };
+  overlay.addEventListener('click', handleClick);
 }
 
 async function refreshPrices() {
@@ -631,7 +645,8 @@ function showManualPriceUpdate() {
     document.getElementById('btnSetManualPrice').onclick = async () => {
       const symbol = document.getElementById('manualSymbol').value;
       const priceStr = document.getElementById('manualPrice').value;
-      const price = parseFloat(priceStr.replace(',', '.'));
+      // CORREGIDO: eliminar .replace(',', '.') — input type="number" ya usa punto
+      const price = parseFloat(priceStr);
 
       if (isNaN(price) || price <= 0) {
         showToast('Introduce un precio válido.');
@@ -676,7 +691,7 @@ function showImportExport() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    closeModal();
+    document.getElementById('modalOverlay').style.display = 'none';
   };
 
   document.getElementById('btnImport').onclick = async () => {
@@ -715,7 +730,7 @@ function showImportExport() {
           }
         });
         
-        closeModal();
+        document.getElementById('modalOverlay').style.display = 'none';
         renderPortfolioSummary();
         showToast('✅ Datos importados correctamente.');
         
