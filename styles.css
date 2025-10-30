@@ -72,7 +72,6 @@ h2 {
   border-bottom: none;
 }
 
-/* --- MODALES --- */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -164,7 +163,6 @@ h2 {
   box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
-/* --- BOTONES UNIVERSALES --- */
 .btn-primary,
 .edit-btn,
 .delete-btn,
@@ -198,7 +196,6 @@ h2 {
   background: #d32f2f;
 }
 
-/* Botones pequeños en listas — CORREGIDO */
 .asset-item .btn-edit,
 .asset-item .btn-delete {
   width: auto;
