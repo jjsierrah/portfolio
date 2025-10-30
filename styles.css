@@ -1,4 +1,4 @@
-* {
+no* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -221,4 +221,25 @@ h2 {
   margin-top: 20px;
   padding-top: 15px;
   border-top: 1px solid #eee;
+  }
+/* Botones en modales */
+.btn-edit, .btn-delete {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.btn-delete {
+  background: #f44336;
+}
+
+.modal-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
   }
