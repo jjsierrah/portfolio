@@ -37,16 +37,5 @@
   <!-- CORREGIDO: eliminado espacio al final de la URL -->
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
   <script src="app.js"></script>
-
-  <!-- Registro del Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' })
-          .then(reg => console.log('SW registrado', reg))
-          .catch(err => console.error('Error al registrar SW:', err));
-      });
-    }
-  </script>
 </body>
 </html>
