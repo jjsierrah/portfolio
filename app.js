@@ -6,15 +6,6 @@ db.version(4).stores({
   prices: 'symbol'
 });
 
-// Forzar reinicio la primera vez (evita errores de migración)
-let dbInitialized = false;
-db.on('ready', () => {
-  if (!dbInitialized) {
-    dbInitialized = true;
-    renderPortfolioSummary();
-  }
-});
-
 function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
@@ -98,7 +89,6 @@ function showConfirm(message, onConfirm) {
 
   const cleanup = () => {
     if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    // Reabrir el modal anterior si es necesario (opcional, no lo hacemos aquí)
   };
 
   btnYes.onclick = () => {
@@ -181,9 +171,18 @@ async function saveCurrentPrice(symbol, price) {
 async function renderPortfolioSummary() {
   try {
     const transactions = await db.transactions.toArray();
+    const summaryTotals = document.getElementById('summary-totals');
+    const summaryByType = document.getElementById('summary-by-type');
+    
+    // Protección: si los elementos no existen, salir
+    if (!summaryTotals || !summaryByType) {
+      console.warn('Elementos del DOM no encontrados. ¿Se ha cargado el HTML?');
+      return;
+    }
+
     if (transactions.length === 0) {
-      document.getElementById('summary-totals').innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
-      document.getElementById('summary-by-type').innerHTML = '';
+      summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
+      summaryByType.innerHTML = '';
       return;
     }
 
@@ -249,7 +248,7 @@ async function renderPortfolioSummary() {
         </div>
       </div>
     `;
-    document.getElementById('summary-totals').innerHTML = totalsHtml;
+    summaryTotals.innerHTML = totalsHtml;
 
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
@@ -278,10 +277,13 @@ async function renderPortfolioSummary() {
         `;
       }
     }
-    document.getElementById('summary-by-type').innerHTML = groupsHtml;
+    summaryByType.innerHTML = groupsHtml;
   } catch (err) {
     console.error('Error en renderPortfolioSummary:', err);
-    document.getElementById('summary-totals').innerHTML = '<p>Error al cargar los datos. Prueba a recargar.</p>';
+    const summaryTotals = document.getElementById('summary-totals');
+    if (summaryTotals) {
+      summaryTotals.innerHTML = '<p>Error al cargar los datos. Prueba a recargar.</p>';
+    }
   }
 }
 
@@ -422,14 +424,14 @@ async function showTransactionsList() {
   }
   openModal('Transacciones', html);
 
-  // --- Manejo directo de clics en el cuerpo del modal (sin listeners persistentes) ---
+  // --- Manejo directo de clics en el cuerpo del modal ---
   const modalBody = document.querySelector('#modalOverlay .modal-body');
   modalBody.onclick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
       const id = parseInt(e.target.dataset.id);
       showConfirm('¿Eliminar esta transacción?', async () => {
         await db.transactions.delete(id);
-        showTransactionsList(); // vuelve a abrir la lista actualizada
+        showTransactionsList();
       });
     }
     if (e.target.classList.contains('btn-edit')) {
@@ -778,24 +780,34 @@ function showImportExport() {
 
 // --- Inicialización segura ---
 document.addEventListener('DOMContentLoaded', () => {
-  db.open().then(() => {
-    renderPortfolioSummary();
-  }).catch(err => {
+  // Abrir base de datos y renderizar
+  db.open().catch(err => {
     console.error('Error al abrir la base de datos:', err);
-    document.getElementById('summary-totals').innerHTML = '<p>Error crítico. Recarga la página.</p>';
+    const summaryTotals = document.getElementById('summary-totals');
+    if (summaryTotals) {
+      summaryTotals.innerHTML = '<p>Error crítico. Recarga la página.</p>';
+    }
+  }).then(() => {
+    renderPortfolioSummary();
   });
 
-  document.getElementById('mainMenu').addEventListener('change', function () {
-    const action = this.value;
-    this.selectedIndex = 0;
-    switch (action) {
-      case 'add-transaction': showAddTransactionForm(); break;
-      case 'view-transactions': showTransactionsList(); break;
-      case 'add-dividend': showAddDividendForm(); break;
-      case 'view-dividends': showDividendsList(); break;
-      case 'refresh-prices': refreshPrices(); break;
-      case 'manual-price': showManualPriceUpdate(); break;
-      case 'import-export': showImportExport(); break;
-    }
-  });
+  // Configurar menú
+  const mainMenu = document.getElementById('mainMenu');
+  if (mainMenu) {
+    mainMenu.addEventListener('change', function () {
+      const action = this.value;
+      this.selectedIndex = 0;
+      switch (action) {
+        case 'add-transaction': showAddTransactionForm(); break;
+        case 'view-transactions': showTransactionsList(); break;
+        case 'add-dividend': showAddDividendForm(); break;
+        case 'view-dividends': showDividendsList(); break;
+        case 'refresh-prices': refreshPrices(); break;
+        case 'manual-price': showManualPriceUpdate(); break;
+        case 'import-export': showImportExport(); break;
+      }
+    });
+  } else {
+    console.error('Menú principal no encontrado');
+  }
 });
