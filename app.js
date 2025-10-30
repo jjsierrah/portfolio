@@ -70,6 +70,42 @@ function showToast(message) {
   }, 3000);
 }
 
+// --- NUEVO: Modal de confirmación personalizado (evita "jjsierrah.github.io dice") ---
+function showConfirm(message, onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.id = 'confirmOverlay';
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width: 350px;">
+      <div class="modal-body" style="text-align: center; padding: 24px;">
+        <p>${message}</p>
+        <div class="modal-actions" style="margin-top: 20px; justify-content: center;">
+          <button id="confirmNo" class="btn-delete" style="width: auto; padding: 8px 16px;">No</button>
+          <button id="confirmYes" class="btn-primary" style="width: auto; padding: 8px 16px; margin-left: 8px;">Sí</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.style.display = 'flex';
+
+  const btnYes = document.getElementById('confirmYes');
+  const btnNo = document.getElementById('confirmNo');
+
+  const cleanup = () => {
+    if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+  };
+
+  btnYes.onclick = () => {
+    cleanup();
+    onConfirm();
+  };
+  btnNo.onclick = cleanup;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) cleanup();
+  };
+}
+
 async function fetchStockPrice(symbol) {
   const symbolMap = {
     'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
@@ -119,7 +155,6 @@ async function fetchCryptoPrice(symbol) {
   if (!id) return null;
 
   try {
-    // CORREGIDO: eliminado espacio al inicio de la URL
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`);
     if (!res.ok) return null;
     const data = await res.json();
@@ -225,10 +260,10 @@ async function renderPortfolioSummary() {
       groupsHtml += `<div class="group-title">${typeName}</div>`;
       for (const a of list) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
-        // CORREGIDO: nombre en mayúsculas
+        // CORREGIDO: nombre se muestra tal como se escribió (sin toUpperCase)
         groupsHtml += `
           <div class="asset-item">
-            <strong>${a.symbol}</strong> ${a.name ? `(${a.name.toUpperCase()})` : ''}<br>
+            <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Cantidad: ${a.totalQuantity} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
             Actual: ${formatCurrency(a.currentValue)} | 
@@ -370,10 +405,10 @@ async function showTransactionsList() {
     const typeLabel = t.type === 'buy' ? 'Compra' : 'Venta';
     const typeColor = t.type === 'buy' ? '#4CAF50' : '#f44336';
     const totalAmount = t.quantity * t.buyPrice;
-    // CORREGIDO: nombre en mayúsculas
+    // CORREGIDO: nombre sin toUpperCase
     html += `
       <div class="asset-item">
-        <strong>${t.symbol}</strong> ${t.name ? `(${t.name.toUpperCase()})` : ''}<br>
+        <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
         <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
         ${t.quantity} @ ${formatCurrency(t.buyPrice)} = ${formatCurrency(totalAmount)}<br>
         Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
@@ -386,14 +421,12 @@ async function showTransactionsList() {
   }
   openModal('Transacciones', html);
 
-  // Usar delegación en el overlay actual (más seguro)
   const overlay = document.getElementById('modalOverlay');
   const handleClick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
-      if (!confirm('¿Eliminar?')) return;
       const id = parseInt(e.target.dataset.id);
-      db.transactions.delete(id).then(() => {
-        overlay.removeEventListener('click', handleClick);
+      showConfirm('¿Eliminar esta transacción?', async () => {
+        await db.transactions.delete(id);
         showTransactionsList();
       });
     }
@@ -401,7 +434,6 @@ async function showTransactionsList() {
       const id = parseInt(e.target.dataset.id);
       db.transactions.get(id).then((tx) => {
         if (!tx) return;
-        overlay.removeEventListener('click', handleClick);
 
         const form = `
           <div class="form-group">
@@ -472,6 +504,8 @@ async function showTransactionsList() {
     }
   };
 
+  // Eliminar listener anterior si existe (evitar duplicados)
+  overlay.removeEventListener('click', handleClick);
   overlay.addEventListener('click', handleClick);
 }
 async function showAddDividendForm() {
@@ -574,15 +608,17 @@ async function showDividendsList() {
   openModal('Dividendos', html);
 
   const overlay = document.getElementById('modalOverlay');
-  const handleClick = async (e) => {
+  const handleClick = (e) => {
     if (e.target.classList.contains('btn-delete')) {
-      if (!confirm('¿Eliminar dividendo?')) return;
       const id = parseInt(e.target.dataset.id);
-      await db.dividends.delete(id);
-      overlay.removeEventListener('click', handleClick);
-      showDividendsList();
+      showConfirm('¿Eliminar este dividendo?', async () => {
+        await db.dividends.delete(id);
+        showDividendsList();
+      });
     }
   };
+
+  overlay.removeEventListener('click', handleClick);
   overlay.addEventListener('click', handleClick);
 }
 
@@ -645,7 +681,6 @@ function showManualPriceUpdate() {
     document.getElementById('btnSetManualPrice').onclick = async () => {
       const symbol = document.getElementById('manualSymbol').value;
       const priceStr = document.getElementById('manualPrice').value;
-      // CORREGIDO: eliminar .replace(',', '.') — input type="number" ya usa punto
       const price = parseFloat(priceStr);
 
       if (isNaN(price) || price <= 0) {
@@ -695,57 +730,56 @@ function showImportExport() {
   };
 
   document.getElementById('btnImport').onclick = async () => {
-    if (!confirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?')) {
-      return;
-    }
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
-    
-    input.onchange = async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    // Usar confirmación personalizada
+    showConfirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?', async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
       
-      let text, data;
-      try {
-        text = await file.text();
-        data = JSON.parse(text);
-        if (!data || typeof data !== 'object') {
-          throw new Error('Estructura inválida');
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        let text, data;
+        try {
+          text = await file.text();
+          data = JSON.parse(text);
+          if (!data || typeof data !== 'object') {
+            throw new Error('Estructura inválida');
+          }
+          
+          await db.transaction('rw', db.transactions, db.dividends, db.prices, async () => {
+            await db.transactions.clear();
+            await db.dividends.clear();
+            await db.prices.clear();
+            if (Array.isArray(data.transactions)) {
+              await db.transactions.bulkAdd(data.transactions);
+            }
+            if (Array.isArray(data.dividends)) {
+              await db.dividends.bulkAdd(data.dividends);
+            }
+            if (Array.isArray(data.prices)) {
+              await db.prices.bulkAdd(data.prices);
+            }
+          });
+          
+          document.getElementById('modalOverlay').style.display = 'none';
+          renderPortfolioSummary();
+          showToast('✅ Datos importados correctamente.');
+          
+        } catch (err) {
+          console.error('Error en importación:', err);
+          showToast('❌ Error: archivo no válido o corrupto.');
+        } finally {
+          if (input.parentNode) {
+            input.parentNode.removeChild(input);
+          }
         }
-        
-        await db.transaction('rw', db.transactions, db.dividends, db.prices, async () => {
-          await db.transactions.clear();
-          await db.dividends.clear();
-          await db.prices.clear();
-          if (Array.isArray(data.transactions)) {
-            await db.transactions.bulkAdd(data.transactions);
-          }
-          if (Array.isArray(data.dividends)) {
-            await db.dividends.bulkAdd(data.dividends);
-          }
-          if (Array.isArray(data.prices)) {
-            await db.prices.bulkAdd(data.prices);
-          }
-        });
-        
-        document.getElementById('modalOverlay').style.display = 'none';
-        renderPortfolioSummary();
-        showToast('✅ Datos importados correctamente.');
-        
-      } catch (err) {
-        console.error('Error en importación:', err);
-        showToast('❌ Error: archivo no válido o corrupto.');
-      } finally {
-        if (input.parentNode) {
-          input.parentNode.removeChild(input);
-        }
-      }
-    };
-    
-    document.body.appendChild(input);
-    input.click();
+      };
+      
+      document.body.appendChild(input);
+      input.click();
+    });
   };
 }
 
