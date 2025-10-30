@@ -462,7 +462,7 @@ async function showTransactionsList() {
       };
     }
   };
-    }
+                               }
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
