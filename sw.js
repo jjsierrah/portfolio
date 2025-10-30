@@ -1,10 +1,10 @@
 const CACHE_NAME = 'portfolio-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/app.js',
-  '/styles.css',
-  '/manifest.json'
+  './',
+  './index.html',
+  './app.js',
+  './styles.css',
+  './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
