@@ -9,7 +9,7 @@
 </head>
 <body>
   <header>
-    <h1>💼 JJ Portfolio1</h1>
+    <h1>💼 JJ Portfolio</h1>
     <select id="mainMenu">
       <option value="">— Menú —</option>
       <option value="refresh-prices">🔄 Actualizar Precios</option>
@@ -24,7 +24,7 @@
 
   <main>
     <section id="portfolio-summary">
-      <h2>Resumen del Portfolio</h2>
+      <h2>Resumen del Portfoli0</h2>
       <div id="summary-totals">Cargando...</div>
       <div id="summary-by-type"></div>
     </section>
@@ -34,8 +34,12 @@
     <div id="modalContent" class="modal-content"></div>
   </div>
 
-  <!-- CORREGIDO: eliminado espacio al final de la URL -->
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
   <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' });
+    }
+  </script>
 </body>
 </html>
