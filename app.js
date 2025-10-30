@@ -61,7 +61,6 @@ function showToast(message) {
   }, 3000);
 }
 
-// --- Modal de confirmación personalizado ---
 function showConfirm(message, onConfirm) {
   const mainOverlay = document.getElementById('modalOverlay');
   if (mainOverlay) mainOverlay.style.display = 'none';
@@ -172,7 +171,6 @@ async function renderPortfolioSummary() {
   const summaryByType = document.getElementById('summary-by-type');
   
   if (!summaryTotals || !summaryByType) {
-    console.error('Elementos del DOM no encontrados');
     return;
   }
 
@@ -278,8 +276,7 @@ async function renderPortfolioSummary() {
     }
     summaryByType.innerHTML = groupsHtml;
   } catch (err) {
-    console.error('Error crítico en renderPortfolioSummary:', err);
-    summaryTotals.innerHTML = '<p style="color:red">⚠️ Error al cargar el portfolio. Abre la consola para más detalles.</p>';
+    summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
     summaryByType.innerHTML = '';
   }
 }
@@ -775,34 +772,26 @@ function showImportExport() {
   };
 }
 
-// --- Inicialización segura ---
 document.addEventListener('DOMContentLoaded', () => {
   db.open().catch(err => {
-    console.error('Error al abrir la base de datos:', err);
-    const summaryTotals = document.getElementById('summary-totals');
-    if (summaryTotals) {
-      summaryTotals.innerHTML = '<p>Error crítico. Recarga la página.</p>';
-    }
+    const el = document.getElementById('summary-totals');
+    if (el) el.innerHTML = '<p>Error. Recarga la página.</p>';
   }).then(() => {
     renderPortfolioSummary();
   });
 
-  const mainMenu = document.getElementById('mainMenu');
-  if (mainMenu) {
-    mainMenu.addEventListener('change', function () {
-      const action = this.value;
+  const menu = document.getElementById('mainMenu');
+  if (menu) {
+    menu.addEventListener('change', function () {
+      const v = this.value;
       this.selectedIndex = 0;
-      switch (action) {
-        case 'add-transaction': showAddTransactionForm(); break;
-        case 'view-transactions': showTransactionsList(); break;
-        case 'add-dividend': showAddDividendForm(); break;
-        case 'view-dividends': showDividendsList(); break;
-        case 'refresh-prices': refreshPrices(); break;
-        case 'manual-price': showManualPriceUpdate(); break;
-        case 'import-export': showImportExport(); break;
-      }
+      if (v === 'add-transaction') showAddTransactionForm();
+      else if (v === 'view-transactions') showTransactionsList();
+      else if (v === 'add-dividend') showAddDividendForm();
+      else if (v === 'view-dividends') showDividendsList();
+      else if (v === 'refresh-prices') refreshPrices();
+      else if (v === 'manual-price') showManualPriceUpdate();
+      else if (v === 'import-export') showImportExport();
     });
-  } else {
-    console.error('Menú principal no encontrado');
   }
 });
