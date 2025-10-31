@@ -259,3 +259,32 @@ h2 {
   font-size: 1.05rem;
   padding: 14px 22px !important;
                              }
+/* --- FILTROS POR TIPO --- */
+.filters-container {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  background: #e0e0e0;
+  color: #333;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-btn.active,
+.filter-btn:hover {
+  background: #1a73e8;
+  color: white;
+}
+
+.filter-btn.stock.active { background: #4CAF50; }
+.filter-btn.etf.active { background: #2196F3; }
+.filter-btn.crypto.active { background: #FF9800; }
