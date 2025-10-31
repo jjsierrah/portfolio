@@ -11,6 +11,15 @@ function today() {
   return d.toISOString().split('T')[0];
 }
 
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
 function formatCurrency(value) {
   return new Intl.NumberFormat('es-ES', {
     style: 'currency',
@@ -181,9 +190,10 @@ async function renderPortfolioSummary() {
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
-      // Eliminar gráfico si existe
       const chart = summaryTotals.nextElementSibling;
       if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
+      const divSummary = summaryByType.previousElementSibling;
+      if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
       return;
     }
 
@@ -296,6 +306,35 @@ async function renderPortfolioSummary() {
       summaryTotals.insertAdjacentHTML('afterend', chartHtml);
     }
 
+    // --- RESUMEN DE DIVIDENDOS ---
+    const dividends = await db.dividends.toArray();
+    if (dividends.length > 0) {
+      const divSummary = {};
+      let totalDividends = 0;
+      for (const d of dividends) {
+        if (!divSummary[d.symbol]) divSummary[d.symbol] = 0;
+        divSummary[d.symbol] += d.amount;
+        totalDividends += d.amount;
+      }
+
+      let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
+      for (const [symbol, amount] of Object.entries(divSummary)) {
+        divHtml += `<div><strong>${symbol}:</strong> ${formatCurrency(amount)}</div>`;
+      }
+      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalDividends)}</div></div>`;
+      
+      if (summaryByType.previousElementSibling?.classList.contains('dividends-summary')) {
+        summaryByType.previousElementSibling.remove();
+      }
+      const divSummaryEl = document.createElement('div');
+      divSummaryEl.className = 'dividends-summary';
+      divSummaryEl.innerHTML = divHtml;
+      summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
+    } else {
+      const divSummary = summaryByType.previousElementSibling;
+      if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
+    }
+
     // --- TARJETAS POR TIPO ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
@@ -326,6 +365,8 @@ async function renderPortfolioSummary() {
     summaryByType.innerHTML = '';
     const chart = summaryTotals.nextElementSibling;
     if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
+    const divSummary = summaryByType.previousElementSibling;
+    if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
   }
 }
 
@@ -438,7 +479,6 @@ function showAddTransactionForm() {
     renderPortfolioSummary();
   };
 }
-
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
@@ -456,7 +496,7 @@ async function showTransactionsList() {
         <strong>${t.symbol}</strong> ${t.name ? `(${t.name})` : ''}<br>
         <span style="color:${typeColor}; font-weight:bold;">${typeLabel}</span> | 
         ${t.quantity} @ ${formatCurrency(t.buyPrice)} = ${formatCurrency(totalAmount)}<br>
-        Comisión: ${formatCurrency(t.commission)} | Fecha: ${t.buyDate}
+        Comisión: ${formatCurrency(t.commission)} | Fecha: ${formatDate(t.buyDate)}
         <div class="modal-actions">
           <button class="btn-edit" data-id="${t.id}">Editar</button>
           <button class="btn-delete" data-id="${t.id}">Eliminar</button>
@@ -548,7 +588,8 @@ async function showTransactionsList() {
       });
     }
   };
-      }
+}
+
 async function showAddDividendForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   if (symbols.length === 0) {
@@ -638,7 +679,7 @@ async function showDividendsList() {
     total += d.amount;
     html += `
       <div class="asset-item">
-        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${d.date}
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
         <div class="modal-actions">
           <button class="btn-delete" data-id="${d.id}">Eliminar</button>
         </div>
