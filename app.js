@@ -190,12 +190,7 @@ async function renderPortfolioSummary() {
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
-      const chart = summaryTotals.nextElementSibling;
-      if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
-      const dividendsSummary = document.querySelector('.dividends-summary');
-      if (dividendsSummary) dividendsSummary.remove();
-      const filters = summaryByType.previousElementSibling;
-      if (filters && filters.classList.contains('filters-container')) filters.remove();
+      document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
       return;
     }
 
@@ -250,6 +245,42 @@ async function renderPortfolioSummary() {
 
     const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
+    // --- GRÁFICO DE COMPOSICIÓN (en el panel superior) ---
+    const groups = { stock: [], etf: [], crypto: [] };
+    Object.values(assets).forEach(asset => {
+      if (asset.totalQuantity > 0) {
+        groups[asset.assetType].push(asset);
+      }
+    });
+
+    let allocationHtml = '';
+    const total = totalCurrentValue;
+    if (total > 0) {
+      const groupShares = {
+        stock: groups.stock.reduce((sum, a) => sum + a.currentValue, 0),
+        etf: groups.etf.reduce((sum, a) => sum + a.currentValue, 0),
+        crypto: groups.crypto.reduce((sum, a) => sum + a.currentValue, 0)
+      };
+      const colors = { stock: '#4CAF50', etf: '#2196F3', crypto: '#FF9800' };
+      const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' };
+      
+      allocationHtml = '<div class="portfolio-allocation">';
+      for (const [type, value] of Object.entries(groupShares)) {
+        if (value > 0) {
+          const pct = (value / total) * 100;
+          allocationHtml += `
+            <div class="allocation-item">
+              <div class="allocation-bar">
+                <div class="allocation-fill" style="width:${pct}%; background-color:${colors[type]}"></div>
+              </div>
+              <small>${typeNames[type]}</small>
+            </div>
+          `;
+        }
+      }
+      allocationHtml += '</div>';
+    }
+
     const totalsHtml = `
       <div class="summary-card">
         <div><strong>Total invertido:</strong> ${formatCurrency(totalInvested)}</div>
@@ -259,75 +290,31 @@ async function renderPortfolioSummary() {
             ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
           </span>
         </div>
+        ${allocationHtml}
       </div>
     `;
-
-    // --- GRÁFICO DE COMPOSICIÓN ---
-    const total = totalCurrentValue;
-    const groups = { stock: [], etf: [], crypto: [] };
-    Object.values(assets).forEach(asset => {
-      if (asset.totalQuantity > 0) {
-        groups[asset.assetType].push(asset);
-      }
-    });
-
-    let chartHtml = '';
-    if (total > 0) {
-      const groupShares = {
-        stock: groups.stock.reduce((sum, a) => sum + a.currentValue, 0),
-        etf: groups.etf.reduce((sum, a) => sum + a.currentValue, 0),
-        crypto: groups.crypto.reduce((sum, a) => sum + a.currentValue, 0)
-      };
-      chartHtml = '<div class="portfolio-chart"><div class="chart-title">Composición de tu portfolio</div>';
-      const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' };
-      const colors = { stock: '#4CAF50', etf: '#2196F3', crypto: '#FF9800' };
-      
-      for (const [type, value] of Object.entries(groupShares)) {
-        if (value > 0) {
-          const pct = (value / total) * 100;
-          chartHtml += `
-            <div class="chart-bar">
-              <div class="bar-label">${typeNames[type]}: ${formatPercent(pct / 100)}</div>
-              <div class="bar-container">
-                <div class="bar-fill" style="width:${pct}%; background-color:${colors[type]};"></div>
-              </div>
-            </div>
-          `;
-        }
-      }
-      chartHtml += '</div>';
-    }
-
-    // Renderizar totales y gráfico
     summaryTotals.innerHTML = totalsHtml;
-    const existingChart = summaryTotals.nextElementSibling;
-    if (existingChart && existingChart.classList.contains('portfolio-chart')) {
-      existingChart.remove();
-    }
-    if (chartHtml) {
-      summaryTotals.insertAdjacentHTML('afterend', chartHtml);
-    }
 
-    // --- RESUMEN DE DIVIDENDOS ---
+    // --- RESUMEN DE DIVIDENDOS (bruto y neto) ---
     const dividends = await db.dividends.toArray();
-    const dividendsSummary = document.querySelector('.dividends-summary');
-    if (dividendsSummary) dividendsSummary.remove();
+    document.querySelectorAll('.dividends-summary').forEach(el => el.remove());
 
     if (dividends.length > 0) {
-      // --- Totales por símbolo ---
       const divSummary = {};
-      let totalDividends = 0;
+      let totalBruto = 0;
       for (const d of dividends) {
         if (!divSummary[d.symbol]) divSummary[d.symbol] = 0;
         divSummary[d.symbol] += d.amount;
-        totalDividends += d.amount;
+        totalBruto += d.amount;
       }
+      const totalNeto = totalBruto * (1 - 0.19); // 19% retención
 
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
-        divHtml += `<div><strong>${symbol}:</strong> ${formatCurrency(amount)}</div>`;
+        const neto = amount * (1 - 0.19);
+        divHtml += `<div><strong>${symbol}:</strong> Bruto: ${formatCurrency(amount)} | Neto: ${formatCurrency(neto)}</div>`;
       }
-      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalDividends)}</div>`;
+      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total Bruto: ${formatCurrency(totalBruto)} | Neto: ${formatCurrency(totalNeto)}</div>`;
 
       // --- Totales por año ---
       const divByYear = {};
@@ -341,7 +328,9 @@ async function renderPortfolioSummary() {
         divHtml += `<div class="dividends-by-year">`;
         const sortedYears = Object.keys(divByYear).sort((a, b) => b - a);
         for (const year of sortedYears) {
-          divHtml += `<div class="dividends-year-title">${year}: ${formatCurrency(divByYear[year])}</div>`;
+          const bruto = divByYear[year];
+          const neto = bruto * (1 - 0.19);
+          divHtml += `<div class="dividends-year-title">${year}: Bruto ${formatCurrency(bruto)} | Neto ${formatCurrency(neto)}</div>`;
         }
         divHtml += `</div>`;
       }
@@ -354,7 +343,8 @@ async function renderPortfolioSummary() {
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
     }
 
-    // --- FILTROS POR TIPO ---
+    // --- FILTROS POR TIPO (evitar duplicados) ---
+    document.querySelectorAll('.filters-container').forEach(el => el.remove());
     const filtersHtml = `
       <div class="filters-container">
         <button class="filter-btn active" data-filter="all">Todo</button>
@@ -363,9 +353,6 @@ async function renderPortfolioSummary() {
         <button class="filter-btn crypto" data-filter="crypto">Cripto</button>
       </div>
     `;
-    if (summaryByType.previousElementSibling?.classList.contains('filters-container')) {
-      summaryByType.previousElementSibling.remove();
-    }
     const filtersEl = document.createElement('div');
     filtersEl.innerHTML = filtersHtml;
     filtersEl.className = 'filters-container';
@@ -404,13 +391,8 @@ async function renderPortfolioSummary() {
         const filter = btn.dataset.filter;
         filterButtons.forEach(b => b.classList.toggle('active', b === btn));
         document.querySelectorAll('.asset-item').forEach(item => {
-          if (filter === 'all') {
-            item.style.display = 'block';
-          } else {
-            item.style.display = item.dataset.type === filter ? 'block' : 'none';
-          }
+          item.style.display = (filter === 'all' || item.dataset.type === filter) ? 'block' : 'none';
         });
-        // Ocultar/mostrar títulos de grupo (solo de activos, no dividendos)
         document.querySelectorAll('.group-title:not(.dividends-summary .group-title)').forEach(title => {
           let sibling = title.nextElementSibling;
           let hasVisible = false;
@@ -428,12 +410,7 @@ async function renderPortfolioSummary() {
   } catch (err) {
     summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
     summaryByType.innerHTML = '';
-    const chart = summaryTotals.nextElementSibling;
-    if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
-    const dividendsSummary = document.querySelector('.dividends-summary');
-    if (dividendsSummary) dividendsSummary.remove();
-    const filters = summaryByType.previousElementSibling;
-    if (filters && filters.classList.contains('filters-container')) filters.remove();
+    document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
   }
 }
 
@@ -545,7 +522,7 @@ function showAddTransactionForm() {
     document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
-                }
+}
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
