@@ -194,6 +194,8 @@ async function renderPortfolioSummary() {
       if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
       const divSummary = summaryByType.previousElementSibling;
       if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
+      const filters = summaryByType.previousElementSibling;
+      if (filters && filters.classList.contains('filters-container')) filters.remove();
       return;
     }
 
@@ -335,6 +337,23 @@ async function renderPortfolioSummary() {
       if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
     }
 
+    // --- FILTROS POR TIPO ---
+    const filtersHtml = `
+      <div class="filters-container">
+        <button class="filter-btn active" data-filter="all">Todo</button>
+        <button class="filter-btn stock" data-filter="stock">Acciones</button>
+        <button class="filter-btn etf" data-filter="etf">ETFs</button>
+        <button class="filter-btn crypto" data-filter="crypto">Cripto</button>
+      </div>
+    `;
+    if (summaryByType.previousElementSibling?.classList.contains('filters-container')) {
+      summaryByType.previousElementSibling.remove();
+    }
+    const filtersEl = document.createElement('div');
+    filtersEl.innerHTML = filtersHtml;
+    filtersEl.className = 'filters-container';
+    summaryByType.parentNode.insertBefore(filtersEl, summaryByType);
+
     // --- TARJETAS POR TIPO ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
@@ -347,7 +366,7 @@ async function renderPortfolioSummary() {
         const gainColor = a.gain >= 0 ? 'green' : 'red';
         const typeClass = type;
         groupsHtml += `
-          <div class="asset-item ${typeClass}">
+          <div class="asset-item ${typeClass}" data-type="${type}">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Cantidad: ${a.totalQuantity} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
@@ -360,6 +379,34 @@ async function renderPortfolioSummary() {
       }
     }
     summaryByType.innerHTML = groupsHtml;
+
+    // --- LÓGICA DE FILTROS ---
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+      btn.onclick = () => {
+        const filter = btn.dataset.filter;
+        filterButtons.forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.asset-item').forEach(item => {
+          if (filter === 'all') {
+            item.style.display = 'block';
+          } else {
+            item.style.display = item.dataset.type === filter ? 'block' : 'none';
+          }
+        });
+        document.querySelectorAll('.group-title').forEach(title => {
+          let sibling = title.nextElementSibling;
+          let hasVisible = false;
+          while (sibling && !sibling.classList.contains('group-title')) {
+            if (sibling.classList.contains('asset-item') && sibling.style.display !== 'none') {
+              hasVisible = true;
+              break;
+            }
+            sibling = sibling.nextElementSibling;
+          }
+          title.style.display = hasVisible ? 'block' : 'none';
+        });
+      };
+    });
   } catch (err) {
     summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
     summaryByType.innerHTML = '';
@@ -367,6 +414,8 @@ async function renderPortfolioSummary() {
     if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
     const divSummary = summaryByType.previousElementSibling;
     if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
+    const filters = summaryByType.previousElementSibling;
+    if (filters && filters.classList.contains('filters-container')) filters.remove();
   }
 }
 
