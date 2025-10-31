@@ -267,13 +267,14 @@ async function renderPortfolioSummary() {
       allocationHtml = '<div class="portfolio-allocation">';
       for (const [type, value] of Object.entries(groupShares)) {
         if (value > 0) {
-          const pct = (value / total) * 100;
+          const pct = (value / total);
+          const pctFormatted = formatPercent(pct);
           allocationHtml += `
             <div class="allocation-item">
               <div class="allocation-bar">
-                <div class="allocation-fill" style="width:${pct}%; background-color:${colors[type]}"></div>
+                <div class="allocation-fill" style="width:${pct * 100}%; background-color:${colors[type]}"></div>
               </div>
-              <small>${typeNames[type]}</small>
+              <small>${typeNames[type]}: ${pctFormatted}</small>
             </div>
           `;
         }
@@ -295,7 +296,7 @@ async function renderPortfolioSummary() {
     `;
     summaryTotals.innerHTML = totalsHtml;
 
-    // --- RESUMEN DE DIVIDENDOS (bruto y neto) ---
+    // --- RESUMEN DE DIVIDENDOS (solo neto con etiqueta) ---
     const dividends = await db.dividends.toArray();
     document.querySelectorAll('.dividends-summary').forEach(el => el.remove());
 
@@ -312,9 +313,9 @@ async function renderPortfolioSummary() {
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
         const neto = amount * (1 - 0.19);
-        divHtml += `<div><strong>${symbol}:</strong> Bruto: ${formatCurrency(amount)} | Neto: ${formatCurrency(neto)}</div>`;
+        divHtml += `<div><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
       }
-      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total Bruto: ${formatCurrency(totalBruto)} | Neto: ${formatCurrency(totalNeto)}</div>`;
+      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
       // --- Totales por año ---
       const divByYear = {};
@@ -330,7 +331,7 @@ async function renderPortfolioSummary() {
         for (const year of sortedYears) {
           const bruto = divByYear[year];
           const neto = bruto * (1 - 0.19);
-          divHtml += `<div class="dividends-year-title">${year}: Bruto ${formatCurrency(bruto)} | Neto ${formatCurrency(neto)}</div>`;
+          divHtml += `<div class="dividends-year-title">${year}: ${formatCurrency(bruto)} | ${formatCurrency(neto)} (Neto)</div>`;
         }
         divHtml += `</div>`;
       }
@@ -522,7 +523,7 @@ function showAddTransactionForm() {
     document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
-}
+      }
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
@@ -725,6 +726,7 @@ async function showDividendsList() {
       <div class="asset-item">
         <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
         <div class="modal-actions">
+          <button class="btn-edit" data-id="${d.id}">Editar</button>
           <button class="btn-delete" data-id="${d.id}">Eliminar</button>
         </div>
       </div>
@@ -740,6 +742,88 @@ async function showDividendsList() {
       showConfirm('¿Eliminar este dividendo?', async () => {
         await db.dividends.delete(id);
         showDividendsList();
+      });
+    }
+    if (e.target.classList.contains('btn-edit')) {
+      const id = parseInt(e.target.dataset.id);
+      db.dividends.get(id).then((div) => {
+        if (!div) return;
+
+        const symbols = [...new Set((await db.transactions.toArray()).map(t => t.symbol))];
+        const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
+
+        const form = `
+          <div class="form-group">
+            <label>Símbolo:</label>
+            <select id="editDivSymbol">${options}</select>
+          </div>
+          <div class="form-group">
+            <label>Dividendo por acción (€):</label>
+            <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
+          </div>
+          <div class="form-group">
+            <label>Total (€):</label>
+            <input type="text" id="editDivTotal" readonly />
+          </div>
+          <div class="form-group">
+            <label>Fecha:</label>
+            <input type="date" id="editDivDate" value="${div.date}" />
+          </div>
+          <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
+        `;
+        openModal('Editar Dividendo', form);
+
+        const perShareInput = document.getElementById('editDivPerShare');
+        const totalInput = document.getElementById('editDivTotal');
+        const symbolSelect = document.getElementById('editDivSymbol');
+
+        async function updateTotal() {
+          const sym = symbolSelect.value;
+          const txs = await db.transactions.where('symbol').equals(sym).toArray();
+          const totalQty = txs.reduce((sum, t) => {
+            let qty = 0;
+            if (t.type === 'buy') qty += t.quantity;
+            if (t.type === 'sell') qty -= t.quantity;
+            return sum + qty;
+          }, 0);
+          const perShare = parseFloat(perShareInput.value) || 0;
+          totalInput.value = formatCurrency(totalQty * perShare);
+        }
+
+        symbolSelect.onchange = updateTotal;
+        perShareInput.oninput = updateTotal;
+        updateTotal();
+
+        document.getElementById('btnUpdateDiv').onclick = async () => {
+          const symbol = symbolSelect.value;
+          const perShare = parseFloat(perShareInput.value);
+          const date = document.getElementById('editDivDate').value;
+
+          if (isNaN(perShare) || perShare <= 0) {
+            showToast('Dividendo por acción inválido.');
+            return;
+          }
+
+          // Recalcular cantidad y total basado en el símbolo actual
+          const txs = await db.transactions.where('symbol').equals(symbol).toArray();
+          const totalQty = txs.reduce((sum, t) => {
+            let qty = 0;
+            if (t.type === 'buy') qty += t.quantity;
+            if (t.type === 'sell') qty -= t.quantity;
+            return sum + qty;
+          }, 0);
+          const newAmount = totalQty * perShare;
+
+          await db.dividends.update(id, {
+            symbol,
+            perShare,
+            amount: newAmount,
+            date
+          });
+
+          document.getElementById('modalOverlay').style.display = 'none';
+          showDividendsList();
+        };
       });
     }
   };
