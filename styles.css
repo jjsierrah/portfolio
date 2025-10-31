@@ -1,3 +1,5 @@
+
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -288,3 +290,15 @@ h2 {
 .filter-btn.stock.active { background: #4CAF50; }
 .filter-btn.etf.active { background: #2196F3; }
 .filter-btn.crypto.active { background: #FF9800; }
+
+.dividends-by-year {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.dividends-year-title {
+  font-weight: bold;
+  margin: 8px 0 4px;
+  color: #555;
+}
