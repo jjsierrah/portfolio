@@ -192,8 +192,8 @@ async function renderPortfolioSummary() {
       summaryByType.innerHTML = '';
       const chart = summaryTotals.nextElementSibling;
       if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
-      const divSummary = summaryByType.previousElementSibling;
-      if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
+      const dividendsSummary = document.querySelector('.dividends-summary');
+      if (dividendsSummary) dividendsSummary.remove();
       const filters = summaryByType.previousElementSibling;
       if (filters && filters.classList.contains('filters-container')) filters.remove();
       return;
@@ -310,7 +310,11 @@ async function renderPortfolioSummary() {
 
     // --- RESUMEN DE DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
+    const dividendsSummary = document.querySelector('.dividends-summary');
+    if (dividendsSummary) dividendsSummary.remove();
+
     if (dividends.length > 0) {
+      // --- Totales por símbolo ---
       const divSummary = {};
       let totalDividends = 0;
       for (const d of dividends) {
@@ -323,18 +327,31 @@ async function renderPortfolioSummary() {
       for (const [symbol, amount] of Object.entries(divSummary)) {
         divHtml += `<div><strong>${symbol}:</strong> ${formatCurrency(amount)}</div>`;
       }
-      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalDividends)}</div></div>`;
-      
-      if (summaryByType.previousElementSibling?.classList.contains('dividends-summary')) {
-        summaryByType.previousElementSibling.remove();
+      divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalDividends)}</div>`;
+
+      // --- Totales por año ---
+      const divByYear = {};
+      for (const d of dividends) {
+        const year = new Date(d.date).getFullYear();
+        if (!divByYear[year]) divByYear[year] = 0;
+        divByYear[year] += d.amount;
       }
+
+      if (Object.keys(divByYear).length > 1) {
+        divHtml += `<div class="dividends-by-year">`;
+        const sortedYears = Object.keys(divByYear).sort((a, b) => b - a);
+        for (const year of sortedYears) {
+          divHtml += `<div class="dividends-year-title">${year}: ${formatCurrency(divByYear[year])}</div>`;
+        }
+        divHtml += `</div>`;
+      }
+
+      divHtml += `</div>`;
+
       const divSummaryEl = document.createElement('div');
       divSummaryEl.className = 'dividends-summary';
       divSummaryEl.innerHTML = divHtml;
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
-    } else {
-      const divSummary = summaryByType.previousElementSibling;
-      if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
     }
 
     // --- FILTROS POR TIPO ---
@@ -393,7 +410,8 @@ async function renderPortfolioSummary() {
             item.style.display = item.dataset.type === filter ? 'block' : 'none';
           }
         });
-        document.querySelectorAll('.group-title').forEach(title => {
+        // Ocultar/mostrar títulos de grupo (solo de activos, no dividendos)
+        document.querySelectorAll('.group-title:not(.dividends-summary .group-title)').forEach(title => {
           let sibling = title.nextElementSibling;
           let hasVisible = false;
           while (sibling && !sibling.classList.contains('group-title')) {
@@ -412,8 +430,8 @@ async function renderPortfolioSummary() {
     summaryByType.innerHTML = '';
     const chart = summaryTotals.nextElementSibling;
     if (chart && chart.classList.contains('portfolio-chart')) chart.remove();
-    const divSummary = summaryByType.previousElementSibling;
-    if (divSummary && divSummary.classList.contains('dividends-summary')) divSummary.remove();
+    const dividendsSummary = document.querySelector('.dividends-summary');
+    if (dividendsSummary) dividendsSummary.remove();
     const filters = summaryByType.previousElementSibling;
     if (filters && filters.classList.contains('filters-container')) filters.remove();
   }
@@ -527,7 +545,7 @@ function showAddTransactionForm() {
     document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
-}
+                }
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
