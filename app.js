@@ -183,6 +183,7 @@ async function getCurrentPrice(symbol) {
 async function saveCurrentPrice(symbol, price) {
   await db.prices.put({ symbol, price });
 }
+
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryByType = document.getElementById('summary-by-type');
@@ -254,7 +255,7 @@ async function renderPortfolioSummary() {
 
     const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
-    // --- GRÁFICO DE COMPOSICIÓN (en el panel superior) ---
+    // --- GRÁFICO DE COMPOSICIÓN ---
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
       if (asset.totalQuantity > 0) {
@@ -305,7 +306,7 @@ async function renderPortfolioSummary() {
     `;
     summaryTotals.innerHTML = totalsHtml;
 
-    // --- RESUMEN DE DIVIDENDOS (solo neto con etiqueta) ---
+    // --- DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
     document.querySelectorAll('.dividends-summary').forEach(el => {
       if (el.parentNode) el.parentNode.removeChild(el);
@@ -319,7 +320,7 @@ async function renderPortfolioSummary() {
         divSummary[d.symbol] += d.amount;
         totalBruto += d.amount;
       }
-      const totalNeto = totalBruto * (1 - 0.19); // 19% retención
+      const totalNeto = totalBruto * (1 - 0.19);
 
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
@@ -328,7 +329,6 @@ async function renderPortfolioSummary() {
       }
       divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
-      // --- Totales por año ---
       const divByYear = {};
       for (const d of dividends) {
         const year = new Date(d.date).getFullYear();
@@ -355,7 +355,7 @@ async function renderPortfolioSummary() {
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
     }
 
-    // --- FILTROS POR TIPO (evitar duplicados) ---
+    // --- FILTROS ---
     document.querySelectorAll('.filters-container').forEach(el => {
       if (el.parentNode) el.parentNode.removeChild(el);
     });
@@ -371,8 +371,7 @@ async function renderPortfolioSummary() {
     filtersEl.innerHTML = filtersHtml;
     filtersEl.className = 'filters-container';
     summaryByType.parentNode.insertBefore(filtersEl, summaryByType);
-
-    // --- TARJETAS POR TIPO ---
+        // --- TARJETAS CON ICONOS ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
@@ -544,7 +543,7 @@ function showAddTransactionForm() {
     document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
-              }
+}
 
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
@@ -742,7 +741,6 @@ async function showAddDividendForm() {
     renderPortfolioSummary();
   };
 }
-
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
