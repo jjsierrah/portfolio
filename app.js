@@ -10,15 +10,13 @@ function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
-
 function isDateValidAndNotFuture(dateString) {
   if (!dateString) return false;
   const inputDate = new Date(dateString);
   const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  todayStart.setHours(0, 0, 0, 0); // Hoy a las 00:00:00
   return inputDate <= todayStart;
 }
-
 function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -57,7 +55,7 @@ function showToast(message) {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--toast-bg);
+    background: #4CAF50;
     color: white;
     padding: 14px 22px;
     border-radius: 10px;
@@ -198,9 +196,7 @@ async function renderPortfolioSummary() {
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
-      document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => {
-        if (el.parentNode) el.parentNode.removeChild(el);
-      });
+      document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
       return;
     }
 
@@ -255,7 +251,7 @@ async function renderPortfolioSummary() {
 
     const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
-    // --- GRÁFICO DE COMPOSICIÓN ---
+    // --- GRÁFICO DE COMPOSICIÓN (en el panel superior) ---
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
       if (asset.totalQuantity > 0) {
@@ -277,7 +273,7 @@ async function renderPortfolioSummary() {
       allocationHtml = '<div class="portfolio-allocation">';
       for (const [type, value] of Object.entries(groupShares)) {
         if (value > 0) {
-          const pct = value / total;
+          const pct = value / total; // <-- Evita división por cero
           const pctFormatted = formatPercent(pct);
           allocationHtml += `
             <div class="allocation-item">
@@ -306,11 +302,9 @@ async function renderPortfolioSummary() {
     `;
     summaryTotals.innerHTML = totalsHtml;
 
-    // --- DIVIDENDOS ---
+    // --- RESUMEN DE DIVIDENDOS (solo neto con etiqueta) ---
     const dividends = await db.dividends.toArray();
-    document.querySelectorAll('.dividends-summary').forEach(el => {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    });
+    document.querySelectorAll('.dividends-summary').forEach(el => el.remove());
 
     if (dividends.length > 0) {
       const divSummary = {};
@@ -320,7 +314,7 @@ async function renderPortfolioSummary() {
         divSummary[d.symbol] += d.amount;
         totalBruto += d.amount;
       }
-      const totalNeto = totalBruto * (1 - 0.19);
+      const totalNeto = totalBruto * (1 - 0.19); // 19% retención
 
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
@@ -329,6 +323,7 @@ async function renderPortfolioSummary() {
       }
       divHtml += `<div style="margin-top:8px; font-weight:bold;">Total: ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
+      // --- Totales por año ---
       const divByYear = {};
       for (const d of dividends) {
         const year = new Date(d.date).getFullYear();
@@ -355,10 +350,8 @@ async function renderPortfolioSummary() {
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
     }
 
-    // --- FILTROS ---
-    document.querySelectorAll('.filters-container').forEach(el => {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    });
+    // --- FILTROS POR TIPO (evitar duplicados) ---
+    document.querySelectorAll('.filters-container').forEach(el => el.remove());
     const filtersHtml = `
       <div class="filters-container">
         <button class="filter-btn active" data-filter="all">Todo</button>
@@ -371,7 +364,8 @@ async function renderPortfolioSummary() {
     filtersEl.innerHTML = filtersHtml;
     filtersEl.className = 'filters-container';
     summaryByType.parentNode.insertBefore(filtersEl, summaryByType);
-        // --- TARJETAS CON ICONOS ---
+
+    // --- TARJETAS POR TIPO ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
@@ -422,11 +416,9 @@ async function renderPortfolioSummary() {
     });
   } catch (err) {
     console.error('Error en renderPortfolioSummary:', err);
-    summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
+    summaryTotals.innerHTML = '<p style="color:red">Error al cargar el portfolio. Ver consola.</p>';
     summaryByType.innerHTML = '';
-    document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    });
+    document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
   }
 }
 
@@ -544,7 +536,6 @@ function showAddTransactionForm() {
     renderPortfolioSummary();
   };
 }
-
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
@@ -581,7 +572,7 @@ async function showTransactionsList() {
         showTransactionsList();
       });
     }
-    if (e.target.classList.contains('btn-edit')) {
+        if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
       db.transactions.get(id).then((tx) => {
         if (!tx) return;
@@ -642,11 +633,6 @@ async function showTransactionsList() {
 
           if (!symbol || isNaN(quantity) || isNaN(price)) {
             showToast('Datos inválidos.');
-            return;
-          }
-
-          if (!isDateValidAndNotFuture(buyDate)) {
-            showToast('La fecha no puede ser futura.');
             return;
           }
 
@@ -740,7 +726,8 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
+      }
+
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -779,6 +766,7 @@ async function showDividendsList() {
       const div = await db.dividends.get(id);
       if (!div) return;
 
+      // Obtener símbolos de forma segura
       let symbols = [];
       try {
         const txs = await db.transactions.toArray();
@@ -847,11 +835,7 @@ async function showDividendsList() {
           return;
         }
 
-        if (!isDateValidAndNotFuture(date)) {
-          showToast('La fecha no puede ser futura.');
-          return;
-        }
-
+        // Recalcular cantidad y total de forma segura
         let totalQty = 0;
         try {
           const txs = await db.transactions.where('symbol').equals(symbol).toArray();
@@ -1046,36 +1030,6 @@ function showImportExport() {
   };
 }
 
-// --- Tema claro/oscuro ---
-function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
-  
-  const toggle = document.getElementById('themeToggle');
-  if (toggle) {
-    toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
-  }
-
-  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-  if (metaThemeColor) {
-    metaThemeColor.setAttribute('content', theme === 'dark' ? '#1a1a1a' : '#1a73e8');
-  }
-}
-
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  setTheme(savedTheme);
-  
-  const toggle = document.getElementById('themeToggle');
-  if (toggle) {
-    toggle.onclick = () => {
-      const current = localStorage.getItem('theme') || 'light';
-      const newTheme = current === 'light' ? 'dark' : 'light';
-      setTheme(newTheme);
-    };
-  }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   db.open().catch(err => {
     console.error('Error al abrir IndexedDB:', err);
@@ -1099,7 +1053,4 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (v === 'import-export') showImportExport();
     });
   }
-
-  // Inicializar tema al cargar
-  initTheme();
 });
