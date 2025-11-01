@@ -3,54 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Gestor de portfolio de inversiones personal" />
-  <meta name="theme-color" content="#1a73e8" />
-
   <title>JJ Portfolio</title>
-
-  <link rel="manifest" href="manifest.json" />
-  <link rel="icon" href="icon-192.png" sizes="192x192" />
-  <link rel="apple-touch-icon" href="icon-512.png" sizes="512x512" />
-
-  <style>
-    /* Evita FOUC (parpadeo de contenido sin estilo) */
-    body { opacity: 0; transition: opacity 0.3s; }
-    body.loaded { opacity: 1; }
-  </style>
-
   <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.json" />
 </head>
 <body>
   <header>
-    <h1>JJ Portfolio</h1>
-    <button id="themeToggle" aria-label="Cambiar tema">🌙</button>
+    <h1>💼 JJ Portfolio</h1>
+    <select id="mainMenu">
+      <option value="">— Menú —</option>
+      <option value="refresh-prices">🔄 Actualizar Precios</option>
+      <option value="manual-price">✏️ Actualizar Precio Manual</option>
+      <option value="add-transaction">➕ Añadir Transacción</option>
+      <option value="view-transactions">📋 Transacciones</option>
+      <option value="add-dividend">💰 Añadir Dividendo</option>
+      <option value="view-dividends">📊 Dividendos</option>
+      <option value="import-export">📤 Exportar / Importar</option>
+    </select>
   </header>
 
-  <select id="mainMenu">
-    <option value="">☰ Menú</option>
-    <option value="add-transaction">Añadir transacción</option>
-    <option value="view-transactions">Ver transacciones</option>
-    <option value="add-dividend">Añadir dividendo</option>
-    <option value="view-dividends">Ver dividendos</option>
-    <option value="refresh-prices">Actualizar precios</option>
-    <option value="manual-price">Actualizar manual</option>
-    <option value="import-export">Exportar / Importar</option>
-  </select>
+  <main>
+    <section id="portfolio-summary">
+      <h2>Resumen del Portfolio</h2>
+      <div id="summary-totals">Cargando...</div>
+      <div id="summary-by-type"></div>
+    </section>
+  </main>
 
-  <section>
-    <h2>Resumen del Portfolio</h2>
-    <div id="summary-totals">Cargando...</div>
-    <div id="summary-by-type"></div>
-  </section>
+  <div id="modalOverlay" class="modal-overlay">
+    <div id="modalContent" class="modal-content"></div>
+  </div>
 
   <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
   <script src="app.js"></script>
-
   <script>
-    // Mejora la experiencia visual al cargar
-    window.addEventListener('load', () => {
-      document.body.classList.add('loaded');
-    });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' });
+    }
   </script>
 </body>
 </html>
