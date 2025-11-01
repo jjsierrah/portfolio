@@ -267,7 +267,7 @@ async function renderPortfolioSummary() {
       allocationHtml = '<div class="portfolio-allocation">';
       for (const [type, value] of Object.entries(groupShares)) {
         if (value > 0) {
-          const pct = (value / total);
+          const pct = value / total; // <-- Evita división por cero
           const pctFormatted = formatPercent(pct);
           allocationHtml += `
             <div class="allocation-item">
@@ -409,7 +409,8 @@ async function renderPortfolioSummary() {
       };
     });
   } catch (err) {
-    summaryTotals.innerHTML = '<p style="color:red">Error al cargar. Recarga la página.</p>';
+    console.error('Error en renderPortfolioSummary:', err);
+    summaryTotals.innerHTML = '<p style="color:red">Error al cargar el portfolio. Ver consola.</p>';
     summaryByType.innerHTML = '';
     document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
   }
@@ -523,7 +524,7 @@ function showAddTransactionForm() {
     document.getElementById('modalOverlay').style.display = 'none';
     renderPortfolioSummary();
   };
-      }
+}
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
@@ -736,7 +737,7 @@ async function showDividendsList() {
   openModal('Dividendos', html);
 
   const modalBody = document.querySelector('#modalOverlay .modal-body');
-  modalBody.onclick = (e) => {
+  modalBody.onclick = async (e) => {
     if (e.target.classList.contains('btn-delete')) {
       const id = parseInt(e.target.dataset.id);
       showConfirm('¿Eliminar este dividendo?', async () => {
@@ -746,85 +747,106 @@ async function showDividendsList() {
     }
     if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
-      db.dividends.get(id).then((div) => {
-        if (!div) return;
+      const div = await db.dividends.get(id);
+      if (!div) return;
 
-        const symbols = [...new Set((await db.transactions.toArray()).map(t => t.symbol))];
-        const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
+      // Obtener símbolos de forma segura
+      let symbols = [];
+      try {
+        const txs = await db.transactions.toArray();
+        symbols = [...new Set(txs.map(t => t.symbol))];
+      } catch (err) {
+        console.warn('No se pudieron cargar los símbolos para edición de dividendo');
+        symbols = [div.symbol];
+      }
 
-        const form = `
-          <div class="form-group">
-            <label>Símbolo:</label>
-            <select id="editDivSymbol">${options}</select>
-          </div>
-          <div class="form-group">
-            <label>Dividendo por acción (€):</label>
-            <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
-          </div>
-          <div class="form-group">
-            <label>Total (€):</label>
-            <input type="text" id="editDivTotal" readonly />
-          </div>
-          <div class="form-group">
-            <label>Fecha:</label>
-            <input type="date" id="editDivDate" value="${div.date}" />
-          </div>
-          <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
-        `;
-        openModal('Editar Dividendo', form);
+      const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
 
-        const perShareInput = document.getElementById('editDivPerShare');
-        const totalInput = document.getElementById('editDivTotal');
-        const symbolSelect = document.getElementById('editDivSymbol');
+      const form = `
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <select id="editDivSymbol">${options}</select>
+        </div>
+        <div class="form-group">
+          <label>Dividendo por acción (€):</label>
+          <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Total (€):</label>
+          <input type="text" id="editDivTotal" readonly />
+        </div>
+        <div class="form-group">
+          <label>Fecha:</label>
+          <input type="date" id="editDivDate" value="${div.date}" />
+        </div>
+        <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
+      `;
+      openModal('Editar Dividendo', form);
 
-        async function updateTotal() {
-          const sym = symbolSelect.value;
+      const perShareInput = document.getElementById('editDivPerShare');
+      const totalInput = document.getElementById('editDivTotal');
+      const symbolSelect = document.getElementById('editDivSymbol');
+
+      async function updateTotal() {
+        const sym = symbolSelect.value;
+        let totalQty = 0;
+        try {
           const txs = await db.transactions.where('symbol').equals(sym).toArray();
-          const totalQty = txs.reduce((sum, t) => {
+          totalQty = txs.reduce((sum, t) => {
             let qty = 0;
             if (t.type === 'buy') qty += t.quantity;
             if (t.type === 'sell') qty -= t.quantity;
             return sum + qty;
           }, 0);
-          const perShare = parseFloat(perShareInput.value) || 0;
-          totalInput.value = formatCurrency(totalQty * perShare);
+        } catch (err) {
+          console.warn('Error al calcular cantidad para dividendo');
+        }
+        const perShare = parseFloat(perShareInput.value) || 0;
+        totalInput.value = formatCurrency(totalQty * perShare);
+      }
+
+      symbolSelect.onchange = updateTotal;
+      perShareInput.oninput = updateTotal;
+      updateTotal();
+
+      document.getElementById('btnUpdateDiv').onclick = async () => {
+        const symbol = symbolSelect.value;
+        const perShare = parseFloat(perShareInput.value);
+        const date = document.getElementById('editDivDate').value;
+
+        if (isNaN(perShare) || perShare <= 0) {
+          showToast('Dividendo por acción inválido.');
+          return;
         }
 
-        symbolSelect.onchange = updateTotal;
-        perShareInput.oninput = updateTotal;
-        updateTotal();
-
-        document.getElementById('btnUpdateDiv').onclick = async () => {
-          const symbol = symbolSelect.value;
-          const perShare = parseFloat(perShareInput.value);
-          const date = document.getElementById('editDivDate').value;
-
-          if (isNaN(perShare) || perShare <= 0) {
-            showToast('Dividendo por acción inválido.');
-            return;
-          }
-
-          // Recalcular cantidad y total basado en el símbolo actual
+        // Recalcular cantidad y total de forma segura
+        let totalQty = 0;
+        try {
           const txs = await db.transactions.where('symbol').equals(symbol).toArray();
-          const totalQty = txs.reduce((sum, t) => {
+          totalQty = txs.reduce((sum, t) => {
             let qty = 0;
             if (t.type === 'buy') qty += t.quantity;
             if (t.type === 'sell') qty -= t.quantity;
             return sum + qty;
           }, 0);
-          const newAmount = totalQty * perShare;
+        } catch (err) {
+          console.error('Error al recalcular cantidad para dividendo:', err);
+          showToast('Error al guardar. Ver consola.');
+          return;
+        }
 
-          await db.dividends.update(id, {
-            symbol,
-            perShare,
-            amount: newAmount,
-            date
-          });
+        const newAmount = totalQty * perShare;
 
-          document.getElementById('modalOverlay').style.display = 'none';
-          showDividendsList();
-        };
-      });
+        await db.dividends.update(id, {
+          symbol,
+          perShare,
+          amount: newAmount,
+          date
+        });
+
+        document.getElementById('modalOverlay').style.display = 'none';
+        showDividendsList();
+      };
     }
   };
 }
@@ -842,7 +864,7 @@ async function refreshPrices() {
   for (const symbol of symbols) {
     let price = null;
     const tx = transactions.find(t => t.symbol === symbol);
-    if (tx.assetType === 'crypto') {
+    if (tx && tx.assetType === 'crypto') {
       price = await fetchCryptoPrice(symbol);
     } else {
       price = await fetchStockPrice(symbol);
@@ -853,7 +875,7 @@ async function refreshPrices() {
     }
   }
 
-  renderPortfolioSummary();
+  await renderPortfolioSummary();
   showToast(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
@@ -900,6 +922,9 @@ function showManualPriceUpdate() {
       await renderPortfolioSummary();
       showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
     };
+  }).catch(err => {
+    console.error('Error en showManualPriceUpdate:', err);
+    showToast('Error al cargar símbolos.');
   });
 }
 
@@ -991,8 +1016,9 @@ function showImportExport() {
 
 document.addEventListener('DOMContentLoaded', () => {
   db.open().catch(err => {
+    console.error('Error al abrir IndexedDB:', err);
     const el = document.getElementById('summary-totals');
-    if (el) el.innerHTML = '<p>Error. Recarga la página.</p>';
+    if (el) el.innerHTML = '<p style="color:red">Error de base de datos. Recarga la página.</p>';
   }).then(() => {
     renderPortfolioSummary();
   });
