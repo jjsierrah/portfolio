@@ -10,7 +10,13 @@ function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
-
+function isDateValidAndNotFuture(dateString) {
+  if (!dateString) return false;
+  const inputDate = new Date(dateString);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0); // Hoy a las 00:00:00
+  return inputDate <= todayStart;
+}
 function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -509,6 +515,11 @@ function showAddTransactionForm() {
       return;
     }
 
+    if (!isDateValidAndNotFuture(buyDate)) {
+      showToast('La fecha no puede ser futura.');
+      return;
+    }
+
     await db.transactions.add({
       symbol,
       name,
@@ -705,12 +716,17 @@ async function showAddDividendForm() {
       return;
     }
 
+    if (!isDateValidAndNotFuture(date)) {
+      showToast('La fecha no puede ser futura.');
+      return;
+    }
+
     await db.dividends.add({ symbol: sym, amount: total, perShare, date });
     document.getElementById('modalOverlay').style.display = 'none';
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
+      }
 
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
