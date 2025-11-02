@@ -400,10 +400,10 @@ h2 {
 
 /* --- ESTILO PARA DIVIDENDOS ALINEADOS --- */
 .dividend-line {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 8px;
   padding: 6px 0;
 }
 
@@ -411,12 +411,6 @@ h2 {
   border-top: 1px solid #eee;
   padding-top: 12px;
   margin-top: 12px;
-}
-
-.dividend-value {
-  min-width: 80px;
-  text-align: right;
-  font-family: inherit;
 }
 
 .dividends-by-year .dividend-line {
@@ -427,7 +421,6 @@ h2 {
 .dividends-by-year .dividend-line strong {
   font-weight: bold;
 }
-
 .portfolio-allocation {
   display: flex;
   flex-wrap: wrap;
