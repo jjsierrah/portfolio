@@ -441,7 +441,7 @@ function openModal(title, content) {
         ${content}
       </div>
     </div>
-  `; de
+  `;
 
   overlay.style.display = 'flex';
 
@@ -726,6 +726,7 @@ async function showAddDividendForm() {
     renderPortfolioSummary();
   };
     }
+
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
