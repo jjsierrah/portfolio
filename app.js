@@ -36,6 +36,14 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function formatNumber(value) {
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true
+  }).format(value);
+}
+
 function formatPercent(value) {
   return new Intl.NumberFormat('es-ES', {
     style: 'percent',
@@ -380,7 +388,7 @@ async function renderPortfolioSummary() {
         groupsHtml += `
           <div class="asset-item ${typeClass}" data-type="${type}">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
-            Cantidad: ${a.totalQuantity} | 
+            Acciones: ${formatNumber(a.totalQuantity)} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
             Actual: ${formatCurrency(a.currentValue)} | 
             Ganancia: <span style="color:${gainColor}; font-weight:bold;">
@@ -454,7 +462,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+      }
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -727,6 +735,7 @@ async function showAddDividendForm() {
     renderPortfolioSummary();
   };
 }
+
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
