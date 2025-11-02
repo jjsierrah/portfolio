@@ -433,3 +433,8 @@ h2 {
 .allocation-fill {
   height: 100%;
 }
+.amount {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Courier New', monospace;
+  text-align: right;
+}
