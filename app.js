@@ -55,7 +55,7 @@ function showToast(message) {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: #4CAF50;
+    background: var(--toast-bg);
     color: white;
     padding: 14px 22px;
     border-radius: 10px;
@@ -454,7 +454,6 @@ function openModal(title, content) {
     if (e.target === overlay) closeModal();
   };
 }
-
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -572,7 +571,7 @@ async function showTransactionsList() {
         showTransactionsList();
       });
     }
-        if (e.target.classList.contains('btn-edit')) {
+    if (e.target.classList.contains('btn-edit')) {
       const id = parseInt(e.target.dataset.id);
       db.transactions.get(id).then((tx) => {
         if (!tx) return;
@@ -726,8 +725,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-      }
-
+}
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -834,7 +832,6 @@ async function showDividendsList() {
           showToast('Dividendo por acción inválido.');
           return;
         }
-
         // Recalcular cantidad y total de forma segura
         let totalQty = 0;
         try {
@@ -1030,6 +1027,32 @@ function showImportExport() {
   };
 }
 
+// --- Tema claro/oscuro ---
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const toggle = document.getElementById('themeToggle');
+  if (toggle) {
+    toggle.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor) {
+    metaThemeColor.setAttribute('content', theme === 'dark' ? '#1a1a1a' : '#1a73e8');
+  }
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  setTheme(savedTheme);
+  const toggle = document.getElementById('themeToggle');
+  if (toggle) {
+    toggle.onclick = () => {
+      const current = localStorage.getItem('theme') || 'light';
+      setTheme(current === 'light' ? 'dark' : 'light');
+    };
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   db.open().catch(err => {
     console.error('Error al abrir IndexedDB:', err);
@@ -1053,4 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (v === 'import-export') showImportExport();
     });
   }
+
+  // Inicializar tema al cargar
+  initTheme();
 });
