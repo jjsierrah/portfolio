@@ -319,9 +319,9 @@ async function renderPortfolioSummary() {
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
         const neto = amount * (1 - 0.19);
-        divHtml += `<div><strong>${symbol}:</strong> <span class="amount">${formatCurrency(amount)}</span> | <span class="amount">${formatCurrency(neto)}</span> (Neto)</div>`;
+        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> <span class="dividend-value">${formatCurrency(amount)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
       }
-      divHtml += `<div style="margin-top:8px; font-weight:bold;"><strong>Total:</strong> <span class="amount">${formatCurrency(totalBruto)}</span> | <span class="amount">${formatCurrency(totalNeto)}</span> (Neto)</div>`;
+      divHtml += `<div class="dividend-line"><strong>Total:</strong> <span class="dividend-value">${formatCurrency(totalBruto)}</span> | <span class="dividend-value">${formatCurrency(totalNeto)}</span> (Neto)</div>`;
 
       // --- Totales por año ---
       const divByYear = {};
@@ -337,7 +337,7 @@ async function renderPortfolioSummary() {
         for (const year of sortedYears) {
           const bruto = divByYear[year];
           const neto = bruto * (1 - 0.19);
-          divHtml += `<div class="dividends-year-title">${year}: <span class="amount">${formatCurrency(bruto)}</span> | <span class="amount">${formatCurrency(neto)}</span> (Neto)</div>`;
+          divHtml += `<div class="dividend-line">${year}: <span class="dividend-value">${formatCurrency(bruto)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
         }
         divHtml += `</div>`;
       }
@@ -441,7 +441,7 @@ function openModal(title, content) {
         ${content}
       </div>
     </div>
-  `;
+  `; de
 
   overlay.style.display = 'flex';
 
@@ -725,7 +725,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
+    }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
