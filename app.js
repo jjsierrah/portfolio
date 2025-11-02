@@ -31,7 +31,8 @@ function formatCurrency(value) {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
+    useGrouping: true  // <-- Separador de miles
   }).format(value);
 }
 
@@ -321,7 +322,7 @@ async function renderPortfolioSummary() {
         const neto = amount * (1 - 0.19);
         divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> <span class="dividend-value">${formatCurrency(amount)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
       }
-      divHtml += `<div class="dividend-line"><strong>Total:</strong> <span class="dividend-value">${formatCurrency(totalBruto)}</span> | <span class="dividend-value">${formatCurrency(totalNeto)}</span> (Neto)</div>`;
+      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> <span class="dividend-value">${formatCurrency(totalBruto)}</span> | <span class="dividend-value">${formatCurrency(totalNeto)}</span> (Neto)</div>`;
 
       // --- Totales por año ---
       const divByYear = {};
@@ -453,7 +454,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-  }
+}
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -1080,4 +1081,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
-
