@@ -328,9 +328,9 @@ async function renderPortfolioSummary() {
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
       for (const [symbol, amount] of Object.entries(divSummary)) {
         const neto = amount * (1 - 0.19);
-        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> <span class="dividend-value">${formatCurrency(amount)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
+        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
       }
-      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> <span class="dividend-value">${formatCurrency(totalBruto)}</span> | <span class="dividend-value">${formatCurrency(totalNeto)}</span> (Neto)</div>`;
+      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
       // --- Totales por año ---
       const divByYear = {};
@@ -346,7 +346,7 @@ async function renderPortfolioSummary() {
         for (const year of sortedYears) {
           const bruto = divByYear[year];
           const neto = bruto * (1 - 0.19);
-          divHtml += `<div class="dividend-line"><strong>${year}:</strong> <span class="dividend-value">${formatCurrency(bruto)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
+          divHtml += `<div class="dividend-line"><strong>${year}:</strong> ${formatCurrency(bruto)} | ${formatCurrency(neto)} (Neto)</div>`;
         }
         divHtml += `</div>`;
       }
@@ -462,7 +462,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-      }
+}
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -735,7 +735,6 @@ async function showAddDividendForm() {
     renderPortfolioSummary();
   };
 }
-
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
