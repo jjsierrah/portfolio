@@ -32,7 +32,7 @@ function formatCurrency(value) {
     currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-    useGrouping: true  // <-- Separador de miles
+    useGrouping: true
   }).format(value);
 }
 
@@ -260,7 +260,7 @@ async function renderPortfolioSummary() {
 
     const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
-    // --- GRÁFICO DE COMPOSICIÓN (en el panel superior) ---
+    // --- GRÁFICO DE COMPOSICIÓN ---
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
       if (asset.totalQuantity > 0) {
@@ -282,7 +282,7 @@ async function renderPortfolioSummary() {
       allocationHtml = '<div class="portfolio-allocation">';
       for (const [type, value] of Object.entries(groupShares)) {
         if (value > 0) {
-          const pct = value / total; // <-- Evita división por cero
+          const pct = value / total;
           const pctFormatted = formatPercent(pct);
           allocationHtml += `
             <div class="allocation-item">
@@ -311,7 +311,7 @@ async function renderPortfolioSummary() {
     `;
     summaryTotals.innerHTML = totalsHtml;
 
-    // --- RESUMEN DE DIVIDENDOS (solo neto con etiqueta) ---
+    // --- RESUMEN DE DIVIDENDOS (COLAPSADO) ---
     const dividends = await db.dividends.toArray();
     document.querySelectorAll('.dividends-summary').forEach(el => el.remove());
 
@@ -323,14 +323,7 @@ async function renderPortfolioSummary() {
         divSummary[d.symbol] += d.amount;
         totalBruto += d.amount;
       }
-      const totalNeto = totalBruto * (1 - 0.19); // 19% retención
-
-      let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
-      for (const [symbol, amount] of Object.entries(divSummary)) {
-        const neto = amount * (1 - 0.19);
-        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
-      }
-      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+      const totalNeto = totalBruto * (1 - 0.19);
 
       // --- Totales por año ---
       const divByYear = {};
@@ -340,6 +333,12 @@ async function renderPortfolioSummary() {
         divByYear[year] += d.amount;
       }
 
+      let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
+
+      // Total general
+      divHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+
+      // Por año
       if (Object.keys(divByYear).length > 1) {
         divHtml += `<div class="dividends-by-year">`;
         const sortedYears = Object.keys(divByYear).sort((a, b) => b - a);
@@ -351,15 +350,36 @@ async function renderPortfolioSummary() {
         divHtml += `</div>`;
       }
 
-      divHtml += `</div>`;
+      // Botón de detalle + contenedor colapsable
+      divHtml += `
+        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem;">
+          ▼ Ver detalle por símbolo
+        </button>
+        <div id="dividendDetail" style="display:none; margin-top:12px;">
+      `;
+      for (const [symbol, amount] of Object.entries(divSummary)) {
+        const neto = amount * (1 - 0.19);
+        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
+      }
+      divHtml += `</div></div>`;
 
       const divSummaryEl = document.createElement('div');
       divSummaryEl.className = 'dividends-summary';
       divSummaryEl.innerHTML = divHtml;
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
+
+      // Lógica del botón de toggle
+      document.getElementById('toggleDividendDetail').onclick = function() {
+        const detail = document.getElementById('dividendDetail');
+        const isVisible = detail.style.display === 'block';
+        detail.style.display = isVisible ? 'none' : 'block';
+        this.textContent = isVisible 
+          ? '▼ Ver detalle por símbolo' 
+          : '▲ Ocultar detalle';
+      };
     }
 
-    // --- FILTROS POR TIPO (evitar duplicados) ---
+    // --- FILTROS ---
     document.querySelectorAll('.filters-container').forEach(el => el.remove());
     const filtersHtml = `
       <div class="filters-container">
@@ -735,6 +755,7 @@ async function showAddDividendForm() {
     renderPortfolioSummary();
   };
 }
+
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
