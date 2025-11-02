@@ -352,8 +352,8 @@ async function renderPortfolioSummary() {
 
       // Botón de detalle + contenedor colapsable
       divHtml += `
-        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem;">
-          ▼ Ver detalle por símbolo
+        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
+          Ver detalle
         </button>
         <div id="dividendDetail" style="display:none; margin-top:12px;">
       `;
@@ -373,9 +373,7 @@ async function renderPortfolioSummary() {
         const detail = document.getElementById('dividendDetail');
         const isVisible = detail.style.display === 'block';
         detail.style.display = isVisible ? 'none' : 'block';
-        this.textContent = isVisible 
-          ? '▼ Ver detalle por símbolo' 
-          : '▲ Ocultar detalle';
+        this.textContent = isVisible ? 'Ver detalle' : 'Ocultar detalle';
       };
     }
 
@@ -754,8 +752,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
-
+      }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1110,3 +1107,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
+
