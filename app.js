@@ -337,7 +337,7 @@ async function renderPortfolioSummary() {
         for (const year of sortedYears) {
           const bruto = divByYear[year];
           const neto = bruto * (1 - 0.19);
-          divHtml += `<div class="dividend-line">${year}: <span class="dividend-value">${formatCurrency(bruto)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
+          divHtml += `<div class="dividend-line"><strong>${year}:</strong> <span class="dividend-value">${formatCurrency(bruto)}</span> | <span class="dividend-value">${formatCurrency(neto)}</span> (Neto)</div>`;
         }
         divHtml += `</div>`;
       }
@@ -453,7 +453,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+  }
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -725,8 +725,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-    }
-
+}
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1081,3 +1080,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
+
