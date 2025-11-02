@@ -438,3 +438,15 @@ h2 {
   font-family: 'Courier New', monospace;
   text-align: right;
 }
+.dividend-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.dividend-value {
+  min-width: 80px;
+  text-align: right;
+  font-family: inherit; /* Mantiene la fuente del resto */
+}
