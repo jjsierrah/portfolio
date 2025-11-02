@@ -417,6 +417,12 @@ h2 {
   padding-left: 16px;
 }
 
+/* Negrita para los años */
+.dividends-by-year .dividend-line strong {
+  font-weight: bold;
+}
+  
+
 .portfolio-allocation {
   display: flex;
   flex-wrap: wrap;
