@@ -856,9 +856,10 @@ async function showDividendsList() {
   let total = 0;
   for (const d of divs) {
     total += d.amount;
+    // ✅ Mostrar quantity en la lista principal
     html += `
       <div class="asset-item">
-        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción, ${formatNumber(d.quantity)} acciones) el ${formatDate(d.date)}
         <div class="modal-actions">
           <button class="btn-edit" data-id="${d.id}">Editar</button>
           <button class="btn-delete" data-id="${d.id}">Eliminar</button>
@@ -894,7 +895,23 @@ async function showDividendsList() {
 
       const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
 
-      // ✅ Mostrar quantity en el formulario
+      // ✅ Asegurar que quantity existe
+      let quantity = div.quantity;
+      if (quantity === undefined || quantity === null) {
+        // Recalcular si no existe
+        const txs = await db.transactions
+          .where('symbol')
+          .equals(div.symbol)
+          .filter(t => t.buyDate <= div.date)
+          .toArray();
+        quantity = 0;
+        for (const t of txs) {
+          if (t.type === 'buy') quantity += t.quantity;
+          else if (t.type === 'sell') quantity -= t.quantity;
+        }
+        quantity = Math.max(0, quantity);
+      }
+
       const form = `
         <div class="form-group">
           <label>Símbolo:</label>
@@ -902,7 +919,7 @@ async function showDividendsList() {
         </div>
         <div class="form-group">
           <label>Títulos:</label>
-          <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
+          <input type="number" id="editDivQuantity" value="${quantity}" step="any" min="0" />
         </div>
         <div class="form-group">
           <label>Dividendo por acción (€):</label>
@@ -1478,4 +1495,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
-        
