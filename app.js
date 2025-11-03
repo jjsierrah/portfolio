@@ -1,9 +1,31 @@
-// --- IndexedDB con reinicio seguro ---
+// --- IndexedDB con migración segura ---
 const db = new Dexie('JJPortfolioDB');
-db.version(4).stores({
+db.version(5).stores({
   transactions: '++id, symbol, name, assetType, quantity, buyPrice, commission, type, buyDate',
-  dividends: '++id, symbol, amount, perShare, date',
+  dividends: '++id, symbol, amount, perShare, date, quantity', // <-- se añade quantity
   prices: 'symbol'
+}).upgrade(tx => {
+  // Migrar dividendos antiguos: calcular quantity en base a transacciones en esa fecha
+  return tx.dividends.toCollection().modify(async (div) => {
+    if (div.quantity === undefined) {
+      // Calcular cantidad de acciones en la fecha del dividendo
+      const txs = await tx.transactions
+        .where('symbol')
+        .equals(div.symbol)
+        .filter(t => t.buyDate <= div.date)
+        .toArray();
+      let qty = 0;
+      for (const t of txs) {
+        if (t.type === 'buy') qty += t.quantity;
+        else if (t.type === 'sell') qty -= t.quantity;
+      }
+      div.quantity = Math.max(0, qty);
+      // Recalcular amount si es necesario
+      if (div.amount === undefined && div.perShare !== undefined) {
+        div.amount = div.quantity * div.perShare;
+      }
+    }
+  });
 });
 
 function today() {
@@ -191,14 +213,13 @@ async function saveCurrentPrice(symbol, price) {
   await db.prices.put({ symbol, price });
 }
 
-// --- Función para guardar el orden personalizado ---
+// --- Funciones para orden ---
 function saveCustomOrder(type, symbolList) {
   const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
   orders[type] = symbolList;
   localStorage.setItem('assetOrder', JSON.stringify(orders));
 }
 
-// --- Función para cargar el orden personalizado ---
 function loadCustomOrder(type) {
   const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
   return orders[type] || [];
@@ -445,7 +466,7 @@ async function renderPortfolioSummary() {
     }
     summaryByType.innerHTML = groupsHtml;
 
-    // --- LÓGICA DE DRAG & DROP ---
+    // --- LÓGICA DE DRAG & DROP (CORREGIDA) ---
     document.querySelectorAll('.asset-list').forEach(list => {
       list.addEventListener('dragstart', e => {
         if (e.target.classList.contains('asset-item')) {
@@ -461,23 +482,30 @@ async function renderPortfolioSummary() {
       });
 
       list.addEventListener('dragenter', e => {
-        if (e.target.classList.contains('asset-item')) {
-          const dragging = document.querySelector('.dragging');
-          const target = e.target;
-          const rect = target.getBoundingClientRect();
-          const next = rect.y + rect.height / 2 < e.clientY ? target.nextSibling : target;
-          if (next !== dragging) {
+        e.preventDefault(); // <-- necesario
+      });
+
+      // ✅ EVENTO DROP AÑADIDO
+      list.addEventListener('drop', e => {
+        e.preventDefault();
+        const dragging = document.querySelector('.dragging');
+        if (dragging) {
+          const target = e.target.closest('.asset-item');
+          if (target && target !== dragging) {
+            const rect = target.getBoundingClientRect();
+            const next = rect.y + rect.height / 2 < e.clientY ? target.nextSibling : target;
             list.insertBefore(dragging, next);
+            
+            // Guardar nuevo orden
+            const type = list.dataset.type;
+            const symbols = Array.from(list.children).map(el => el.dataset.symbol);
+            saveCustomOrder(type, symbols);
           }
         }
       });
 
       list.addEventListener('dragend', e => {
         e.target.classList.remove('dragging');
-        // Guardar nuevo orden
-        const type = list.dataset.type;
-        const symbols = Array.from(list.children).map(el => el.dataset.symbol);
-        saveCustomOrder(type, symbols);
       });
     });
 
@@ -810,12 +838,292 @@ async function showAddDividendForm() {
       return;
     }
 
-    await db.dividends.add({ symbol: sym, amount: total, perShare, date });
+    await db.dividends.add({ symbol: sym, quantity: qty, amount: total, perShare, date });
     document.getElementById('modalOverlay').style.display = 'none';
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
+      }
+
+async function showDividendsList() {
+  const divs = await db.dividends.reverse().toArray();
+  if (divs.length === 0) {
+    openModal('Dividendos', '<p>No hay dividendos.</p>');
+    return;
   }
+
+  let html = '<h3>Dividendos</h3>';
+  let total = 0;
+  for (const d of divs) {
+    total += d.amount;
+    html += `
+      <div class="asset-item">
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
+        <div class="modal-actions">
+          <button class="btn-edit" data-id="${d.id}">Editar</button>
+          <button class="btn-delete" data-id="${d.id}">Eliminar</button>
+        </div>
+      </div>
+    `;
+  }
+  html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
+  openModal('Dividendos', html);
+
+  const modalBody = document.querySelector('#modalOverlay .modal-body');
+  modalBody.onclick = async (e) => {
+    if (e.target.classList.contains('btn-delete')) {
+      const id = parseInt(e.target.dataset.id);
+      showConfirm('¿Eliminar este dividendo?', async () => {
+        await db.dividends.delete(id);
+        showDividendsList();
+      });
+    }
+    if (e.target.classList.contains('btn-edit')) {
+      const id = parseInt(e.target.dataset.id);
+      const div = await db.dividends.get(id);
+      if (!div) return;
+
+      // Obtener símbolos
+      let symbols = [];
+      try {
+        const txs = await db.transactions.toArray();
+        symbols = [...new Set(txs.map(t => t.symbol))];
+      } catch (err) {
+        symbols = [div.symbol];
+      }
+
+      const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
+
+      // ✅ Mostrar quantity en el formulario
+      const form = `
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <select id="editDivSymbol">${options}</select>
+        </div>
+        <div class="form-group">
+          <label>Títulos:</label>
+          <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Dividendo por acción (€):</label>
+          <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Total (€):</label>
+          <input type="text" id="editDivTotal" readonly />
+        </div>
+        <div class="form-group">
+          <label>Fecha:</label>
+          <input type="date" id="editDivDate" value="${div.date}" />
+        </div>
+        <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
+      `;
+      openModal('Editar Dividendo', form);
+
+      const qtyInput = document.getElementById('editDivQuantity');
+      const perShareInput = document.getElementById('editDivPerShare');
+      const totalInput = document.getElementById('editDivTotal');
+
+      function updateTotal() {
+        const qty = parseFloat(qtyInput.value) || 0;
+        const perShare = parseFloat(perShareInput.value) || 0;
+        totalInput.value = formatCurrency(qty * perShare);
+      }
+
+      qtyInput.oninput = updateTotal;
+      perShareInput.oninput = updateTotal;
+      updateTotal();
+
+      document.getElementById('btnUpdateDiv').onclick = async () => {
+        const symbol = document.getElementById('editDivSymbol').value;
+        const quantity = parseFloat(qtyInput.value);
+        const perShare = parseFloat(perShareInput.value);
+        const date = document.getElementById('editDivDate').value;
+
+        if (isNaN(quantity) || quantity < 0 || isNaN(perShare) || perShare <= 0) {
+          showToast('Datos inválidos.');
+          return;
+        }
+
+        const amount = quantity * perShare;
+
+        await db.dividends.update(id, {
+          symbol,
+          quantity,
+          perShare,
+          amount,
+          date
+        });
+
+        document.getElementById('modalOverlay').style.display = 'none';
+        showDividendsList();
+      };
+    }
+  };
+}
+
+async function refreshPrices() {
+  const transactions = await db.transactions.toArray();
+  if (transactions.length === 0) {
+    showToast('No hay transacciones.');
+    return;
+  }
+
+  const symbols = [...new Set(transactions.map(t => t.symbol))];
+  let updated = 0;
+
+  for (const symbol of symbols) {
+    let price = null;
+    const tx = transactions.find(t => t.symbol === symbol);
+    if (tx && tx.assetType === 'crypto') {
+      price = await fetchCryptoPrice(symbol);
+    } else {
+      price = await fetchStockPrice(symbol);
+    }
+    if (price !== null) {
+      await saveCurrentPrice(symbol, price);
+      updated++;
+    }
+  }
+
+  await renderPortfolioSummary();
+  showToast(`Precios actualizados: ${updated}/${symbols.length}`);
+}
+
+function showManualPriceUpdate() {
+  db.transactions.toArray().then(async (txs) => {
+    if (txs.length === 0) {
+      showToast('No hay transacciones.');
+      return;
+    }
+
+    const symbols = [...new Set(txs.map(t => t.symbol))];
+    let options = '';
+    for (const sym of symbols) {
+      const current = await getCurrentPrice(sym);
+      const display = current !== null ? formatCurrency(current) : '—';
+      options += `<option value="${sym}">${sym} (actual: ${display})</option>`;
+    }
+
+    const form = `
+      <div class="form-group">
+        <label>Símbolo:</label>
+        <select id="manualSymbol">${options}</select>
+      </div>
+      <div class="form-group">
+        <label>Precio actual (€):</label>
+        <input type="number" id="manualPrice" step="any" min="0" />
+      </div>
+      <button id="btnSetManualPrice" class="btn-primary">Establecer Precio</button>
+    `;
+    openModal('Actualizar Precio Manualmente', form);
+
+    document.getElementById('btnSetManualPrice').onclick = async () => {
+      const symbol = document.getElementById('manualSymbol').value;
+      const priceStr = document.getElementById('manualPrice').value;
+      const price = parseFloat(priceStr);
+
+      if (isNaN(price) || price <= 0) {
+        showToast('Introduce un precio válido.');
+        return;
+      }
+
+      await saveCurrentPrice(symbol, price);
+      document.getElementById('modalOverlay').style.display = 'none';
+      await renderPortfolioSummary();
+      showToast(`✅ Precio actualizado: ${symbol} = ${formatCurrency(price)}`);
+    };
+  }).catch(err => {
+    console.error('Error en showManualPriceUpdate:', err);
+    showToast('Error al cargar símbolos.');
+  });
+}
+
+function showImportExport() {
+  const content = `
+    <h3>Exportar / Importar Datos</h3>
+    <p class="modal-section">
+      <button id="btnExport" class="btn-primary">Exportar a JSON</button>
+    </p>
+    <p class="modal-section">
+      <button id="btnImport" class="btn-primary">Importar desde JSON</button>
+    </p>
+    <p class="modal-note">
+      ⚠️ Importar reemplazará todos tus datos actuales.
+    </p>
+  `;
+  openModal('Exportar / Importar', content);
+
+  document.getElementById('btnExport').onclick = async () => {
+    const transactions = await db.transactions.toArray();
+    const dividends = await db.dividends.toArray();
+    const prices = await db.prices.toArray();
+    const data = { transactions, dividends, prices };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'jj-portfolio-backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    document.getElementById('modalOverlay').style.display = 'none';
+  };
+
+  document.getElementById('btnImport').onclick = async () => {
+    showConfirm('⚠️ Esto borrará todos tus datos actuales. ¿Continuar?', async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        let text, data;
+        try {
+          text = await file.text();
+          data = JSON.parse(text);
+          if (!data || typeof data !== 'object') {
+            throw new Error('Estructura inválida');
+          }
+          
+          await db.transaction('rw', db.transactions, db.dividends, db.prices, async () => {
+            await db.transactions.clear();
+            await db.dividends.clear();
+            await db.prices.clear();
+            if (Array.isArray(data.transactions)) {
+              await db.transactions.bulkAdd(data.transactions);
+            }
+            if (Array.isArray(data.dividends)) {
+              await db.dividends.bulkAdd(data.dividends);
+            }
+            if (Array.isArray(data.prices)) {
+              await db.prices.bulkAdd(data.prices);
+            }
+          });
+          
+          document.getElementById('modalOverlay').style.display = 'none';
+          renderPortfolioSummary();
+          showToast('✅ Datos importados correctamente.');
+          
+        } catch (err) {
+          console.error('Error en importación:', err);
+          showToast('❌ Error: archivo no válido o corrupto.');
+        } finally {
+          if (input.parentNode) {
+            input.parentNode.removeChild(input);
+          }
+        }
+      };
+      
+      document.body.appendChild(input);
+      input.click();
+    });
+  };
+}
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1170,3 +1478,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
+        
