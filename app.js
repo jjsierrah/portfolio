@@ -191,6 +191,19 @@ async function saveCurrentPrice(symbol, price) {
   await db.prices.put({ symbol, price });
 }
 
+// --- Función para guardar el orden personalizado ---
+function saveCustomOrder(type, symbolList) {
+  const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
+  orders[type] = symbolList;
+  localStorage.setItem('assetOrder', JSON.stringify(orders));
+}
+
+// --- Función para cargar el orden personalizado ---
+function loadCustomOrder(type) {
+  const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
+  return orders[type] || [];
+}
+
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryByType = document.getElementById('summary-by-type');
@@ -397,14 +410,27 @@ async function renderPortfolioSummary() {
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
       const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' }[type];
+      
+      // Cargar orden personalizado
+      const customOrder = loadCustomOrder(type);
+      const orderedList = [...list].sort((a, b) => {
+        const aIndex = customOrder.indexOf(a.symbol);
+        const bIndex = customOrder.indexOf(b.symbol);
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+
       groupsHtml += `<div class="group-title">${typeName}</div>`;
-      for (const a of list) {
+      groupsHtml += `<div class="asset-list" data-type="${type}">`;
+      for (const a of orderedList) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
         const gainIcon = a.gain >= 0 ? '📈' : '📉';
         const gainColor = a.gain >= 0 ? 'green' : 'red';
         const typeClass = type;
         groupsHtml += `
-          <div class="asset-item ${typeClass}" data-type="${type}">
+          <div class="asset-item ${typeClass}" data-type="${type}" data-symbol="${a.symbol}" draggable="true">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Acciones: ${formatNumber(a.totalQuantity)} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
@@ -415,8 +441,45 @@ async function renderPortfolioSummary() {
           </div>
         `;
       }
+      groupsHtml += `</div>`;
     }
     summaryByType.innerHTML = groupsHtml;
+
+    // --- LÓGICA DE DRAG & DROP ---
+    document.querySelectorAll('.asset-list').forEach(list => {
+      list.addEventListener('dragstart', e => {
+        if (e.target.classList.contains('asset-item')) {
+          e.target.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', e.target.dataset.symbol);
+          e.dataTransfer.effectAllowed = 'move';
+        }
+      });
+
+      list.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+
+      list.addEventListener('dragenter', e => {
+        if (e.target.classList.contains('asset-item')) {
+          const dragging = document.querySelector('.dragging');
+          const target = e.target;
+          const rect = target.getBoundingClientRect();
+          const next = rect.y + rect.height / 2 < e.clientY ? target.nextSibling : target;
+          if (next !== dragging) {
+            list.insertBefore(dragging, next);
+          }
+        }
+      });
+
+      list.addEventListener('dragend', e => {
+        e.target.classList.remove('dragging');
+        // Guardar nuevo orden
+        const type = list.dataset.type;
+        const symbols = Array.from(list.children).map(el => el.dataset.symbol);
+        saveCustomOrder(type, symbols);
+      });
+    });
 
     // --- LÓGICA DE FILTROS ---
     const filterButtons = document.querySelectorAll('.filter-btn');
@@ -752,7 +815,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-      }
+  }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1107,4 +1170,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
-
