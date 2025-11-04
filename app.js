@@ -913,7 +913,7 @@ async function showDividendsList() {
           <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
         </div>
         <div class="form-group">
-          <label>Dividendo por acción (€):</label>
+          <label>Divid3ndo por acción (€):</label>
           <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
         </div>
         <div class="form-group">
