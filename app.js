@@ -571,7 +571,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+          }
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -811,7 +811,7 @@ async function showAddDividendForm() {
       if (t.type === 'sell') qty -= t.quantity;
       return sum + qty;
     }, 0);
-    // ✅ Proponer cantidad, pero permitir editar
+    // Proponer cantidad, pero permitir editar
     if (qtyInput.value === '' || qtyInput.value === '0') {
       qtyInput.value = Math.max(0, totalQty);
     }
@@ -891,6 +891,7 @@ async function showDividendsList() {
       const div = await db.dividends.get(id);
       if (!div) return;
 
+      // Obtener símbolos
       let symbols = [];
       try {
         const txs = await db.transactions.toArray();
@@ -901,6 +902,7 @@ async function showDividendsList() {
 
       const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
 
+      // ✅ Mostrar quantity en el formulario de edición
       const form = `
         <div class="form-group">
           <label>Símbolo:</label>
@@ -1129,7 +1131,7 @@ function showImportExport() {
       input.click();
     });
   };
-        }
+                                               }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1484,4 +1486,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
-            
