@@ -779,7 +779,7 @@ async function showAddDividendForm() {
     </div>
     <div class="form-group">
       <label>Títulos:</label>
-      <input type="number" id="divQuantity" readonly />
+      <input type="number" id="divQuantity" step="any" min="0" />
     </div>
     <div class="form-group">
       <label>Dividendo por acción (€):</label>
@@ -811,14 +811,22 @@ async function showAddDividendForm() {
       if (t.type === 'sell') qty -= t.quantity;
       return sum + qty;
     }, 0);
-    qtyInput.value = Math.max(0, totalQty);
-    totalInput.value = formatCurrency(totalQty * (parseFloat(perShareInput.value) || 0));
+    // ✅ Proponer cantidad, pero permitir editar
+    if (qtyInput.value === '' || qtyInput.value === '0') {
+      qtyInput.value = Math.max(0, totalQty);
+    }
+    updateTotal();
+  }
+
+  function updateTotal() {
+    const qty = parseFloat(qtyInput.value) || 0;
+    const perShare = parseFloat(perShareInput.value) || 0;
+    totalInput.value = formatCurrency(qty * perShare);
   }
 
   symbolSelect.onchange = updateQty;
-  perShareInput.oninput = () => {
-    totalInput.value = formatCurrency((parseFloat(qtyInput.value) || 0) * (parseFloat(perShareInput.value) || 0));
-  };
+  qtyInput.oninput = updateTotal;
+  perShareInput.oninput = updateTotal;
   updateQty();
 
   document.getElementById('btnSaveDiv').onclick = async () => {
@@ -828,8 +836,8 @@ async function showAddDividendForm() {
     const total = qty * perShare;
     const date = document.getElementById('divDate').value;
 
-    if (isNaN(perShare) || perShare <= 0) {
-      showToast('Dividendo por acción inválido.');
+    if (isNaN(qty) || qty < 0 || isNaN(perShare) || perShare <= 0) {
+      showToast('Completa Títulos y Dividendo por acción.');
       return;
     }
 
@@ -843,7 +851,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-      }
+}
 
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
@@ -856,10 +864,9 @@ async function showDividendsList() {
   let total = 0;
   for (const d of divs) {
     total += d.amount;
-    // ✅ Mostrar quantity en la lista principal
     html += `
       <div class="asset-item">
-        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción, ${formatNumber(d.quantity)} acciones) el ${formatDate(d.date)}
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
         <div class="modal-actions">
           <button class="btn-edit" data-id="${d.id}">Editar</button>
           <button class="btn-delete" data-id="${d.id}">Eliminar</button>
@@ -884,7 +891,6 @@ async function showDividendsList() {
       const div = await db.dividends.get(id);
       if (!div) return;
 
-      // Obtener símbolos
       let symbols = [];
       try {
         const txs = await db.transactions.toArray();
@@ -895,23 +901,6 @@ async function showDividendsList() {
 
       const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
 
-      // ✅ Asegurar que quantity existe
-      let quantity = div.quantity;
-      if (quantity === undefined || quantity === null) {
-        // Recalcular si no existe
-        const txs = await db.transactions
-          .where('symbol')
-          .equals(div.symbol)
-          .filter(t => t.buyDate <= div.date)
-          .toArray();
-        quantity = 0;
-        for (const t of txs) {
-          if (t.type === 'buy') quantity += t.quantity;
-          else if (t.type === 'sell') quantity -= t.quantity;
-        }
-        quantity = Math.max(0, quantity);
-      }
-
       const form = `
         <div class="form-group">
           <label>Símbolo:</label>
@@ -919,7 +908,7 @@ async function showDividendsList() {
         </div>
         <div class="form-group">
           <label>Títulos:</label>
-          <input type="number" id="editDivQuantity" value="${quantity}" step="any" min="0" />
+          <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
         </div>
         <div class="form-group">
           <label>Dividendo por acción (€):</label>
@@ -1140,7 +1129,7 @@ function showImportExport() {
       input.click();
     });
   };
-}
+        }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
@@ -1495,3 +1484,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
+            
