@@ -571,7 +571,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-          }
+}
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -1131,7 +1131,7 @@ function showImportExport() {
       input.click();
     });
   };
-                                               }
+                                }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
