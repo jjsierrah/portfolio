@@ -1191,7 +1191,7 @@ function showImportExport() {
           <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
         </div>
         <div class="form-group">
-          <label>Dividendo por acción (€):</label>
+          <label>Div1dendo por acción (€):</label>
           <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
         </div>
         <div class="form-group">
