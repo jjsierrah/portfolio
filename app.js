@@ -335,11 +335,11 @@ async function renderPortfolioSummary() {
       <div class="summary-card">
         <div><strong>Total invertido:</strong> ${formatCurrency(totalInvested)}</div>
         <div><strong>Valor actual:</strong> ${formatCurrency(totalCurrentValue)}</div>
-        <div><strong>Ganancia:</strong> 
-          <span style="color:${totalGain >= 0 ? 'green' : 'red'}">
-            ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
-          </span>
-        </div>
+<div><strong>Ganancia:</strong> 
+  <span style="color:${totalGain >= 0 ? 'green' : 'red'}; font-weight: bold;">
+    ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
+  </span>
+</div>
         ${allocationHtml}
       </div>
     `;
