@@ -347,7 +347,7 @@ async function renderPortfolioSummary() {
 
     // --- RESUMEN DE DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
-    document.querySelectorAll('.dividends-summary, .sales-summary').forEach(el => el.remove());
+    document.querySelectorAll('.dividends-summary, .sales-summary, .filters-container').forEach(el => el.remove());
 
     if (dividends.length > 0) {
       const divSummary = {};
@@ -360,12 +360,11 @@ async function renderPortfolioSummary() {
       const totalNeto = totalBruto * (1 - 0.19);
 
       let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
-      for (const [symbol, amount] of Object.entries(divSummary)) {
-        const neto = amount * (1 - 0.19);
-        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
-      }
-      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
+      // Total general
+      divHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+
+      // Por año
       const divByYear = {};
       for (const d of dividends) {
         const year = new Date(d.date).getFullYear();
@@ -384,7 +383,18 @@ async function renderPortfolioSummary() {
         divHtml += `</div>`;
       }
 
-      divHtml += `</div>`;
+      // Botón de detalle + contenedor colapsable
+      divHtml += `
+        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
+          Ver detalle
+        </button>
+        <div id="dividendDetail" style="display:none; margin-top:12px;">
+      `;
+      for (const [symbol, amount] of Object.entries(divSummary)) {
+        const neto = amount * (1 - 0.19);
+        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
+      }
+      divHtml += `</div></div>`;
 
       const divSummaryEl = document.createElement('div');
       divSummaryEl.className = 'dividends-summary';
@@ -474,7 +484,6 @@ async function renderPortfolioSummary() {
     }
 
     // --- FILTROS ---
-    document.querySelectorAll('.filters-container').forEach(el => el.remove());
     const filtersHtml = `
       <div class="filters-container">
         <button class="filter-btn active" data-filter="all">Todo</button>
@@ -493,14 +502,27 @@ async function renderPortfolioSummary() {
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
       const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' }[type];
+      
+      // Cargar orden personalizado
+      const customOrder = loadCustomOrder(type);
+      const orderedList = [...list].sort((a, b) => {
+        const aIndex = customOrder.indexOf(a.symbol);
+        const bIndex = customOrder.indexOf(b.symbol);
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+
       groupsHtml += `<div class="group-title">${typeName}</div>`;
-      for (const a of list) {
+      groupsHtml += `<div class="asset-list" data-type="${type}">`;
+      for (const a of orderedList) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
         const gainIcon = a.gain >= 0 ? '📈' : '📉';
         const gainColor = a.gain >= 0 ? 'green' : 'red';
         const typeClass = type;
         groupsHtml += `
-          <div class="asset-item ${typeClass}" data-type="${type}">
+          <div class="asset-item ${typeClass}" data-type="${type}" data-symbol="${a.symbol}" draggable="true">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Acciones: ${formatNumber(a.totalQuantity)} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
@@ -511,6 +533,7 @@ async function renderPortfolioSummary() {
           </div>
         `;
       }
+      groupsHtml += `</div>`;
     }
     summaryByType.innerHTML = groupsHtml;
 
@@ -556,6 +579,7 @@ async function renderPortfolioSummary() {
         e.target.classList.remove('dragging');
       });
     });
+
     // --- LÓGICA DE FILTROS ---
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
@@ -1232,3 +1256,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializar tema al cargar
   initTheme();
 });
+                                                     
