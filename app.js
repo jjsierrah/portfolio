@@ -239,7 +239,7 @@ async function renderPortfolioSummary() {
     if (transactions.length === 0) {
       summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
       summaryByType.innerHTML = '';
-      document.querySelectorAll('.dividends-summary, .filters-container').forEach(el => el.remove());
+      document.querySelectorAll('.dividends-summary, .filters-container, .sales-summary').forEach(el => el.remove());
       return;
     }
 
@@ -335,19 +335,19 @@ async function renderPortfolioSummary() {
       <div class="summary-card">
         <div><strong>Total invertido:</strong> ${formatCurrency(totalInvested)}</div>
         <div><strong>Valor actual:</strong> ${formatCurrency(totalCurrentValue)}</div>
-<div><strong>Ganancia:</strong> 
-  <span style="color:${totalGain >= 0 ? 'green' : 'red'}; font-weight: bold;">
-    ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
-  </span>
-</div>
+        <div><strong>Ganancia:</strong> 
+          <span style="color:${totalGain >= 0 ? 'green' : 'red'}; font-weight: bold;">
+            ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
+          </span>
+        </div>
         ${allocationHtml}
       </div>
     `;
     summaryTotals.innerHTML = totalsHtml;
 
-    // --- RESUMEN DE DIVIDENDOS (COLAPSADO) ---
+    // --- RESUMEN DE DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
-    document.querySelectorAll('.dividends-summary').forEach(el => el.remove());
+    document.querySelectorAll('.dividends-summary, .sales-summary').forEach(el => el.remove());
 
     if (dividends.length > 0) {
       const divSummary = {};
@@ -359,7 +359,13 @@ async function renderPortfolioSummary() {
       }
       const totalNeto = totalBruto * (1 - 0.19);
 
-      // --- Totales por año ---
+      let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
+      for (const [symbol, amount] of Object.entries(divSummary)) {
+        const neto = amount * (1 - 0.19);
+        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
+      }
+      divHtml += `<div class="dividend-line divider"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+
       const divByYear = {};
       for (const d of dividends) {
         const year = new Date(d.date).getFullYear();
@@ -367,12 +373,6 @@ async function renderPortfolioSummary() {
         divByYear[year] += d.amount;
       }
 
-      let divHtml = `<div class="summary-card"><div class="group-title">Dividendos recibidos</div>`;
-
-      // Total general
-      divHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
-
-      // Por año
       if (Object.keys(divByYear).length > 1) {
         divHtml += `<div class="dividends-by-year">`;
         const sortedYears = Object.keys(divByYear).sort((a, b) => b - a);
@@ -384,31 +384,93 @@ async function renderPortfolioSummary() {
         divHtml += `</div>`;
       }
 
-      // Botón de detalle + contenedor colapsable
-      divHtml += `
-        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
-          Ver detalle
-        </button>
-        <div id="dividendDetail" style="display:none; margin-top:12px;">
-      `;
-      for (const [symbol, amount] of Object.entries(divSummary)) {
-        const neto = amount * (1 - 0.19);
-        divHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
-      }
-      divHtml += `</div></div>`;
+      divHtml += `</div>`;
 
       const divSummaryEl = document.createElement('div');
       divSummaryEl.className = 'dividends-summary';
       divSummaryEl.innerHTML = divHtml;
       summaryByType.parentNode.insertBefore(divSummaryEl, summaryByType);
+    }
 
-      // Lógica del botón de toggle
-      document.getElementById('toggleDividendDetail').onclick = function() {
-        const detail = document.getElementById('dividendDetail');
-        const isVisible = detail.style.display === 'block';
-        detail.style.display = isVisible ? 'none' : 'block';
-        this.textContent = isVisible ? 'Ver detalle' : 'Ocultar detalle';
-      };
+    // --- RESUMEN DE VENTAS REALIZADAS ---
+    const sales = transactions.filter(t => t.type === 'sell');
+    if (sales.length > 0) {
+      // Agrupar ventas por símbolo para calcular ganancia real (FIFO simple)
+      const salesBySymbol = {};
+      for (const sale of sales) {
+        if (!salesBySymbol[sale.symbol]) {
+          salesBySymbol[sale.symbol] = {
+            symbol: sale.symbol,
+            name: sale.name,
+            assetType: sale.assetType,
+            totalQuantity: 0,
+            totalProceeds: 0,
+            totalCost: 0,
+            sales: []
+          };
+        }
+        salesBySymbol[sale.symbol].sales.push(sale);
+        salesBySymbol[sale.symbol].totalQuantity += sale.quantity;
+        salesBySymbol[sale.symbol].totalProceeds += sale.quantity * sale.buyPrice - (sale.commission || 0);
+      }
+
+      // Calcular coste usando FIFO
+      for (const symbol in salesBySymbol) {
+        const group = salesBySymbol[symbol];
+        const buys = transactions
+          .filter(t => t.symbol === symbol && t.type === 'buy')
+          .sort((a, b) => new Date(a.buyDate) - new Date(b.buyDate)); // FIFO
+
+        let remainingToSell = group.totalQuantity;
+        let totalCost = 0;
+
+        for (const buy of buys) {
+          if (remainingToSell <= 0) break;
+          const usedQty = Math.min(buy.quantity, remainingToSell);
+          totalCost += usedQty * buy.buyPrice + (buy.commission || 0) * (usedQty / buy.quantity);
+          remainingToSell -= usedQty;
+        }
+
+        group.totalCost = totalCost;
+        group.gain = group.totalProceeds - totalCost;
+      }
+
+      // Agrupar por tipo
+      const salesGroups = { stock: [], etf: [], crypto: [] };
+      let totalSalesGain = 0;
+      for (const symbol in salesBySymbol) {
+        const sale = salesBySymbol[symbol];
+        salesGroups[sale.assetType].push(sale);
+        totalSalesGain += sale.gain;
+      }
+
+      let salesHtml = `<div class="summary-card sales-summary"><div class="group-title">Ventas realizadas</div>`;
+      for (const [type, list] of Object.entries(salesGroups)) {
+        if (list.length === 0) continue;
+        const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' }[type];
+        salesHtml += `<div class="group-title">${typeName}</div>`;
+        for (const s of list) {
+          const color = s.gain >= 0 ? 'green' : 'red';
+          salesHtml += `
+            <div class="dividend-line">
+              <strong>${s.symbol}:</strong> 
+              <span style="color:${color}; font-weight:bold;">
+                ${s.gain >= 0 ? '+' : ''}${formatCurrency(s.gain)} (${formatPercent(s.gain / s.totalCost || 0)})
+              </span>
+            </div>
+          `;
+        }
+      }
+      salesHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
+        <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
+          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)} (${formatPercent(totalSalesGain / (totalInvested + totalSalesGain) || 0)})
+        </span>
+      </div>`;
+      salesHtml += `</div>`;
+
+      const salesEl = document.createElement('div');
+      salesEl.innerHTML = salesHtml;
+      summaryByType.parentNode.insertBefore(salesEl, summaryByType.nextSibling);
     }
 
     // --- FILTROS ---
@@ -424,34 +486,21 @@ async function renderPortfolioSummary() {
     const filtersEl = document.createElement('div');
     filtersEl.innerHTML = filtersHtml;
     filtersEl.className = 'filters-container';
-    summaryByType.parentNode.insertBefore(filtersEl, summaryByType);
+    summaryByType.parentNode.insertBefore(filtersEl, summaryByType.nextSibling);
 
     // --- TARJETAS POR TIPO ---
     let groupsHtml = '';
     for (const [type, list] of Object.entries(groups)) {
       if (list.length === 0) continue;
       const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' }[type];
-      
-      // Cargar orden personalizado
-      const customOrder = loadCustomOrder(type);
-      const orderedList = [...list].sort((a, b) => {
-        const aIndex = customOrder.indexOf(a.symbol);
-        const bIndex = customOrder.indexOf(b.symbol);
-        if (aIndex === -1 && bIndex === -1) return 0;
-        if (aIndex === -1) return 1;
-        if (bIndex === -1) return -1;
-        return aIndex - bIndex;
-      });
-
       groupsHtml += `<div class="group-title">${typeName}</div>`;
-      groupsHtml += `<div class="asset-list" data-type="${type}">`;
-      for (const a of orderedList) {
+      for (const a of list) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
         const gainIcon = a.gain >= 0 ? '📈' : '📉';
         const gainColor = a.gain >= 0 ? 'green' : 'red';
         const typeClass = type;
         groupsHtml += `
-          <div class="asset-item ${typeClass}" data-type="${type}" data-symbol="${a.symbol}" draggable="true">
+          <div class="asset-item ${typeClass}" data-type="${type}">
             <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
             Acciones: ${formatNumber(a.totalQuantity)} | 
             Invertido: ${formatCurrency(a.totalInvested)} | 
@@ -462,7 +511,6 @@ async function renderPortfolioSummary() {
           </div>
         `;
       }
-      groupsHtml += `</div>`;
     }
     summaryByType.innerHTML = groupsHtml;
 
@@ -508,7 +556,6 @@ async function renderPortfolioSummary() {
         e.target.classList.remove('dragging');
       });
     });
-
     // --- LÓGICA DE FILTROS ---
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
