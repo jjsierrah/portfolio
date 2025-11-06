@@ -224,7 +224,6 @@ function loadCustomOrder(type) {
   const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
   return orders[type] || [];
 }
-
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryContainer = document.getElementById('summary-by-type');
@@ -478,11 +477,12 @@ async function renderPortfolioSummary() {
           `;
         }
       }
-fullHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
-  <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
-    ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}
-  </span>
-</div>`;
+      fullHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
+        <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
+          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)} (${formatPercent(totalSalesGain / (totalInvested + totalSalesGain) || 0)})
+        </span>
+      </div>`;
+      fullHtml += `</div>`;
     }
 
     // --- FILTROS ---
@@ -651,7 +651,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+    }
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
