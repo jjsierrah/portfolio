@@ -246,6 +246,17 @@ async function renderPortfolioSummary() {
     let totalInvested = 0;
     let totalCurrentValue = 0;
 
+    // --- CÁLCULO DEL TOTAL INVERTIDO SEGÚN TU DEFINICIÓN ---
+    for (const t of transactions) {
+      if (t.type === 'buy') {
+        totalInvested += t.quantity * t.buyPrice + (t.commission || 0);
+      } else if (t.type === 'sell') {
+        totalInvested -= t.quantity * t.buyPrice;          // Recuperas el importe de la venta
+        totalInvested += (t.commission || 0);             // Pero pagas comisión (dinero que sale de tu bolsillo)
+      }
+    }
+
+    // --- CÁLCULO DEL TOTAL POR ACTIVO (para cartera) ---
     const currentPrices = {};
     for (const sym of symbols) {
       currentPrices[sym] = await getCurrentPrice(sym);
@@ -271,11 +282,12 @@ async function renderPortfolioSummary() {
         assets[key].totalQuantity += t.quantity;
         const cost = t.quantity * t.buyPrice + (t.commission || 0);
         assets[key].totalInvested += cost;
-        totalInvested += cost;
       } else if (t.type === 'sell') {
         assets[key].totalQuantity -= t.quantity;
-        const proceeds = t.quantity * t.buyPrice - (t.commission || 0);
-        totalInvested -= proceeds;
+        // Nota: el totalInvested por activo ya no se usa en la ganancia global, 
+        // pero se mantiene para coherencia en las tarjetas
+        const cost = t.quantity * t.buyPrice; // No restamos comisión aquí (solo afecta al global)
+        assets[key].totalInvested -= cost;
       }
     }
 
@@ -639,7 +651,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+            }
 function showAddTransactionForm() {
   const form = `
     <div class="form-group">
