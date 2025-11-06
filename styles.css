@@ -456,38 +456,3 @@ h2 {
 .allocation-fill {
   height: 100%;
 }
-header {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-header h1 {
-  margin: 0;
-  flex: 1;
-  text-align: center;
-}
-
-#themeToggle {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
-  color: var(--text-primary);
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-#themeToggle:hover {
-  background-color: var(--filter-bg);
-}
