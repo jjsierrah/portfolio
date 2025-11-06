@@ -224,6 +224,7 @@ function loadCustomOrder(type) {
   const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
   return orders[type] || [];
 }
+
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryContainer = document.getElementById('summary-by-type');
