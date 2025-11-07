@@ -486,7 +486,7 @@ async function renderPortfolioSummary() {
       }
       fullHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
         <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
-          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)} (${formatPercent(totalSalesGain / (totalInvested + totalSalesGain) || 0)})
+          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}
         </span>
       </div>`;
       fullHtml += `</div>`;
@@ -658,7 +658,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-    }
+}
 async function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -938,7 +938,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
+                            }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
