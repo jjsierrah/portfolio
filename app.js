@@ -658,7 +658,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-            }
+        }
 async function showAddTransactionForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
@@ -1092,7 +1092,7 @@ async function refreshPrices() {
   showToast(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
-async function showManualPriceUpdate() {
+function showManualPriceUpdate() {
   db.transactions.toArray().then(async (txs) => {
     if (txs.length === 0) {
       showToast('No hay transacciones.');
@@ -1100,13 +1100,17 @@ async function showManualPriceUpdate() {
     }
 
     const symbols = [...new Set(txs.map(t => t.symbol))];
-    const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
+    let options = '';
+    for (const sym of symbols) {
+      const current = await getCurrentPrice(sym);
+      const display = current !== null ? formatCurrency(current) : '—';
+      options += `<option value="${sym}">${sym} (actual: ${display})</option>`;
+    }
 
     const form = `
       <div class="form-group">
         <label>Símbolo:</label>
-        <input type="text" id="manualSymbol" list="symbols" placeholder="Ej: BBVA..." required />
-        <datalist id="symbols">${symbolOptions}</datalist>
+        <select id="manualSymbol">${options}</select>
       </div>
       <div class="form-group">
         <label>Precio actual (€):</label>
@@ -1117,12 +1121,12 @@ async function showManualPriceUpdate() {
     openModal('Actualizar Precio Manualmente', form);
 
     document.getElementById('btnSetManualPrice').onclick = async () => {
-      const symbol = document.getElementById('manualSymbol').value.trim().toUpperCase();
+      const symbol = document.getElementById('manualSymbol').value;
       const priceStr = document.getElementById('manualPrice').value;
       const price = parseFloat(priceStr);
 
-      if (!symbol || isNaN(price) || price <= 0) {
-        showToast('Introduce un símbolo y precio válidos.');
+      if (isNaN(price) || price <= 0) {
+        showToast('Introduce un precio válido.');
         return;
       }
 
