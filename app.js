@@ -651,8 +651,8 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-    }
-function showAddTransactionForm() {
+}
+async function showAddTransactionForm() {
   const form = `
     <div class="form-group">
       <label>Tipo de operación:</label>
@@ -733,6 +733,7 @@ function showAddTransactionForm() {
     renderPortfolioSummary();
   };
 }
+
 async function showTransactionsList() {
   const txs = await db.transactions.toArray();
   if (txs.length === 0) {
@@ -891,10 +892,8 @@ async function showAddDividendForm() {
       if (t.type === 'sell') qty -= t.quantity;
       return sum + qty;
     }, 0);
-    // Proponer cantidad, pero permitir editar
-    if (qtyInput.value === '' || qtyInput.value === '0') {
-      qtyInput.value = Math.max(0, totalQty);
-    }
+    // ✅ Siempre actualizar al cambiar de símbolo
+    qtyInput.value = Math.max(0, totalQty);
     updateTotal();
   }
 
@@ -904,10 +903,11 @@ async function showAddDividendForm() {
     totalInput.value = formatCurrency(qty * perShare);
   }
 
+  // ✅ Ahora se actualiza SIEMPRE al cambiar de símbolo
   symbolSelect.onchange = updateQty;
   qtyInput.oninput = updateTotal;
   perShareInput.oninput = updateTotal;
-  updateQty();
+  updateQty(); // Inicial
 
   document.getElementById('btnSaveDiv').onclick = async () => {
     const sym = symbolSelect.value;
@@ -931,7 +931,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-}
+  }
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
