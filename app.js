@@ -32,13 +32,20 @@ function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
+
 function isDateValidAndNotFuture(dateString) {
   if (!dateString) return false;
+
   const inputDate = new Date(dateString);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0); // Hoy a las 00:00:00
-  return inputDate <= todayStart;
+  if (isNaN(inputDate.getTime())) return false; // Fecha inválida
+
+  const today = new Date();
+  const inputDateMidnight = new Date(inputDate.setHours(0, 0, 0, 0));
+  const todayMidnight = new Date(today.setHours(0, 0, 0, 0));
+
+  return inputDateMidnight <= todayMidnight;
 }
+
 function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -651,7 +658,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+    }
 async function showAddTransactionForm() {
   const form = `
     <div class="form-group">
@@ -931,7 +938,7 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-  }
+}
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
