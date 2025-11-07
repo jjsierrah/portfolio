@@ -660,6 +660,9 @@ function openModal(title, content) {
   };
 }
 async function showAddTransactionForm() {
+  const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
+  const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
+
   const form = `
     <div class="form-group">
       <label>Tipo de operación:</label>
@@ -678,7 +681,8 @@ async function showAddTransactionForm() {
     </div>
     <div class="form-group">
       <label>Símbolo:</label>
-      <input type="text" id="symbol" placeholder="AAPL, BTC..." required />
+      <input type="text" id="symbol" list="symbols" placeholder="Ej: BBVA, BTC..." required />
+      <datalist id="symbols">${symbolOptions}</datalist>
     </div>
     <div class="form-group">
       <label>Nombre (opcional):</label>
@@ -859,11 +863,13 @@ async function showAddDividendForm() {
     return;
   }
 
-  const options = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+  const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
+
   const form = `
     <div class="form-group">
       <label>Símbolo:</label>
-      <select id="divSymbol">${options}</select>
+      <input type="text" id="divSymbol" list="symbols" placeholder="Selecciona o escribe..." required />
+      <datalist id="symbols">${symbolOptions}</datalist>
     </div>
     <div class="form-group">
       <label>Títulos:</label>
@@ -885,13 +891,18 @@ async function showAddDividendForm() {
   `;
   openModal('Añadir Dividendo', form);
 
-  const symbolSelect = document.getElementById('divSymbol');
+  const symbolInput = document.getElementById('divSymbol');
   const qtyInput = document.getElementById('divQuantity');
   const perShareInput = document.getElementById('divPerShare');
   const totalInput = document.getElementById('divTotal');
 
   async function updateQty() {
-    const sym = symbolSelect.value;
+    const sym = symbolInput.value.trim().toUpperCase();
+    if (!sym) {
+      qtyInput.value = '';
+      updateTotal();
+      return;
+    }
     const txs = await db.transactions.where('symbol').equals(sym).toArray();
     const totalQty = txs.reduce((sum, t) => {
       let qty = 0;
@@ -899,7 +910,6 @@ async function showAddDividendForm() {
       if (t.type === 'sell') qty -= t.quantity;
       return sum + qty;
     }, 0);
-    // ✅ Siempre actualizar al cambiar de símbolo
     qtyInput.value = Math.max(0, totalQty);
     updateTotal();
   }
@@ -910,21 +920,19 @@ async function showAddDividendForm() {
     totalInput.value = formatCurrency(qty * perShare);
   }
 
-  // ✅ Ahora se actualiza SIEMPRE al cambiar de símbolo
-  symbolSelect.onchange = updateQty;
+  symbolInput.oninput = updateQty;
   qtyInput.oninput = updateTotal;
   perShareInput.oninput = updateTotal;
-  updateQty(); // Inicial
 
   document.getElementById('btnSaveDiv').onclick = async () => {
-    const sym = symbolSelect.value;
+    const sym = symbolInput.value.trim().toUpperCase();
     const qty = parseFloat(qtyInput.value);
     const perShare = parseFloat(perShareInput.value);
     const total = qty * perShare;
     const date = document.getElementById('divDate').value;
 
-    if (isNaN(qty) || qty < 0 || isNaN(perShare) || perShare <= 0) {
-      showToast('Completa Títulos y Dividendo por acción.');
+    if (!sym || isNaN(qty) || qty < 0 || isNaN(perShare) || perShare <= 0) {
+      showToast('Completa Símbolo, Títulos y Dividendo por acción.');
       return;
     }
 
@@ -938,7 +946,124 @@ async function showAddDividendForm() {
     showToast(`✅ Dividendo añadido: ${sym} – ${formatCurrency(total)}`);
     renderPortfolioSummary();
   };
-                            }
+}
+
+async function showDividendsList() {
+  const divs = await db.dividends.reverse().toArray();
+  if (divs.length === 0) {
+    openModal('Dividendos', '<p>No hay dividendos.</p>');
+    return;
+  }
+
+  let html = '<h3>Dividendos</h3>';
+  let total = 0;
+  for (const d of divs) {
+    total += d.amount;
+    html += `
+      <div class="asset-item">
+        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
+        <div class="modal-actions">
+          <button class="btn-edit" data-id="${d.id}">Editar</button>
+          <button class="btn-delete" data-id="${d.id}">Eliminar</button>
+        </div>
+      </div>
+    `;
+  }
+  html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
+  openModal('Dividendos', html);
+
+  const modalBody = document.querySelector('#modalOverlay .modal-body');
+  modalBody.onclick = async (e) => {
+    if (e.target.classList.contains('btn-delete')) {
+      const id = parseInt(e.target.dataset.id);
+      showConfirm('¿Eliminar este dividendo?', async () => {
+        await db.dividends.delete(id);
+        showDividendsList();
+      });
+    }
+    if (e.target.classList.contains('btn-edit')) {
+      const id = parseInt(e.target.dataset.id);
+      const div = await db.dividends.get(id);
+      if (!div) return;
+
+      // Obtener símbolos
+      let symbols = [];
+      try {
+        const txs = await db.transactions.toArray();
+        symbols = [...new Set(txs.map(t => t.symbol))];
+      } catch (err) {
+        symbols = [div.symbol];
+      }
+
+      const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
+
+      // ✅ Mostrar quantity en el formulario de edición
+      const form = `
+        <div class="form-group">
+          <label>Símbolo:</label>
+          <select id="editDivSymbol">${options}</select>
+        </div>
+        <div class="form-group">
+          <label>Títulos:</label>
+          <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Dividendo por acción (€):</label>
+          <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Total (€):</label>
+          <input type="text" id="editDivTotal" readonly />
+        </div>
+        <div class="form-group">
+          <label>Fecha:</label>
+          <input type="date" id="editDivDate" value="${div.date}" />
+        </div>
+        <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
+      `;
+      openModal('Editar Dividendo', form);
+
+      const qtyInput = document.getElementById('editDivQuantity');
+      const perShareInput = document.getElementById('editDivPerShare');
+      const totalInput = document.getElementById('editDivTotal');
+
+      function updateTotal() {
+        const qty = parseFloat(qtyInput.value) || 0;
+        const perShare = parseFloat(perShareInput.value) || 0;
+        totalInput.value = formatCurrency(qty * perShare);
+      }
+
+      qtyInput.oninput = updateTotal;
+      perShareInput.oninput = updateTotal;
+      updateTotal();
+
+      document.getElementById('btnUpdateDiv').onclick = async () => {
+        const symbol = document.getElementById('editDivSymbol').value;
+        const quantity = parseFloat(qtyInput.value);
+        const perShare = parseFloat(perShareInput.value);
+        const date = document.getElementById('editDivDate').value;
+
+        if (isNaN(quantity) || quantity < 0 || isNaN(perShare) || perShare <= 0) {
+          showToast('Datos inválidos.');
+          return;
+        }
+
+        const amount = quantity * perShare;
+
+        await db.dividends.update(id, {
+          symbol,
+          quantity,
+          perShare,
+          amount,
+          date
+        });
+
+        document.getElementById('modalOverlay').style.display = 'none';
+        showDividendsList();
+      };
+    }
+  };
+}
 async function showDividendsList() {
   const divs = await db.dividends.reverse().toArray();
   if (divs.length === 0) {
