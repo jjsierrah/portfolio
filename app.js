@@ -658,7 +658,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+            }
 async function showAddTransactionForm() {
   const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
   const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
@@ -1064,123 +1064,6 @@ async function showDividendsList() {
     }
   };
 }
-async function showDividendsList() {
-  const divs = await db.dividends.reverse().toArray();
-  if (divs.length === 0) {
-    openModal('Dividendos', '<p>No hay dividendos.</p>');
-    return;
-  }
-
-  let html = '<h3>Dividendos</h3>';
-  let total = 0;
-  for (const d of divs) {
-    total += d.amount;
-    html += `
-      <div class="asset-item">
-        <strong>${d.symbol}</strong>: ${formatCurrency(d.amount)} (${formatCurrency(d.perShare)}/acción) el ${formatDate(d.date)}
-        <div class="modal-actions">
-          <button class="btn-edit" data-id="${d.id}">Editar</button>
-          <button class="btn-delete" data-id="${d.id}">Eliminar</button>
-        </div>
-      </div>
-    `;
-  }
-  html += `<div class="summary-card"><strong>Total:</strong> ${formatCurrency(total)}</div>`;
-  openModal('Dividendos', html);
-
-  const modalBody = document.querySelector('#modalOverlay .modal-body');
-  modalBody.onclick = async (e) => {
-    if (e.target.classList.contains('btn-delete')) {
-      const id = parseInt(e.target.dataset.id);
-      showConfirm('¿Eliminar este dividendo?', async () => {
-        await db.dividends.delete(id);
-        showDividendsList();
-      });
-    }
-    if (e.target.classList.contains('btn-edit')) {
-      const id = parseInt(e.target.dataset.id);
-      const div = await db.dividends.get(id);
-      if (!div) return;
-
-      // Obtener símbolos
-      let symbols = [];
-      try {
-        const txs = await db.transactions.toArray();
-        symbols = [...new Set(txs.map(t => t.symbol))];
-      } catch (err) {
-        symbols = [div.symbol];
-      }
-
-      const options = symbols.map(s => `<option value="${s}" ${s === div.symbol ? 'selected' : ''}>${s}</option>`).join('');
-
-      // ✅ Mostrar quantity en el formulario de edición
-      const form = `
-        <div class="form-group">
-          <label>Símbolo:</label>
-          <select id="editDivSymbol">${options}</select>
-        </div>
-        <div class="form-group">
-          <label>Títulos:</label>
-          <input type="number" id="editDivQuantity" value="${div.quantity || 0}" step="any" min="0" />
-        </div>
-        <div class="form-group">
-          <label>Dividendo por acción (€):</label>
-          <input type="number" id="editDivPerShare" value="${div.perShare}" step="any" min="0" />
-        </div>
-        <div class="form-group">
-          <label>Total (€):</label>
-          <input type="text" id="editDivTotal" readonly />
-        </div>
-        <div class="form-group">
-          <label>Fecha:</label>
-          <input type="date" id="editDivDate" value="${div.date}" />
-        </div>
-        <button id="btnUpdateDiv" class="btn-primary">Guardar</button>
-      `;
-      openModal('Editar Dividendo', form);
-
-      const qtyInput = document.getElementById('editDivQuantity');
-      const perShareInput = document.getElementById('editDivPerShare');
-      const totalInput = document.getElementById('editDivTotal');
-
-      function updateTotal() {
-        const qty = parseFloat(qtyInput.value) || 0;
-        const perShare = parseFloat(perShareInput.value) || 0;
-        totalInput.value = formatCurrency(qty * perShare);
-      }
-
-      qtyInput.oninput = updateTotal;
-      perShareInput.oninput = updateTotal;
-      updateTotal();
-
-      document.getElementById('btnUpdateDiv').onclick = async () => {
-        const symbol = document.getElementById('editDivSymbol').value;
-        const quantity = parseFloat(qtyInput.value);
-        const perShare = parseFloat(perShareInput.value);
-        const date = document.getElementById('editDivDate').value;
-
-        if (isNaN(quantity) || quantity < 0 || isNaN(perShare) || perShare <= 0) {
-          showToast('Datos inválidos.');
-          return;
-        }
-
-        const amount = quantity * perShare;
-
-        await db.dividends.update(id, {
-          symbol,
-          quantity,
-          perShare,
-          amount,
-          date
-        });
-
-        document.getElementById('modalOverlay').style.display = 'none';
-        showDividendsList();
-      };
-    }
-  };
-}
-
 async function refreshPrices() {
   const transactions = await db.transactions.toArray();
   if (transactions.length === 0) {
@@ -1209,7 +1092,7 @@ async function refreshPrices() {
   showToast(`Precios actualizados: ${updated}/${symbols.length}`);
 }
 
-function showManualPriceUpdate() {
+async function showManualPriceUpdate() {
   db.transactions.toArray().then(async (txs) => {
     if (txs.length === 0) {
       showToast('No hay transacciones.');
@@ -1217,17 +1100,13 @@ function showManualPriceUpdate() {
     }
 
     const symbols = [...new Set(txs.map(t => t.symbol))];
-    let options = '';
-    for (const sym of symbols) {
-      const current = await getCurrentPrice(sym);
-      const display = current !== null ? formatCurrency(current) : '—';
-      options += `<option value="${sym}">${sym} (actual: ${display})</option>`;
-    }
+    const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
 
     const form = `
       <div class="form-group">
         <label>Símbolo:</label>
-        <select id="manualSymbol">${options}</select>
+        <input type="text" id="manualSymbol" list="symbols" placeholder="Ej: BBVA..." required />
+        <datalist id="symbols">${symbolOptions}</datalist>
       </div>
       <div class="form-group">
         <label>Precio actual (€):</label>
@@ -1238,12 +1117,12 @@ function showManualPriceUpdate() {
     openModal('Actualizar Precio Manualmente', form);
 
     document.getElementById('btnSetManualPrice').onclick = async () => {
-      const symbol = document.getElementById('manualSymbol').value;
+      const symbol = document.getElementById('manualSymbol').value.trim().toUpperCase();
       const priceStr = document.getElementById('manualPrice').value;
       const price = parseFloat(priceStr);
 
-      if (isNaN(price) || price <= 0) {
-        showToast('Introduce un precio válido.');
+      if (!symbol || isNaN(price) || price <= 0) {
+        showToast('Introduce un símbolo y precio válidos.');
         return;
       }
 
