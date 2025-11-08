@@ -566,7 +566,6 @@ async function renderPortfolioSummary() {
         e.target.classList.remove('dragging');
       });
     });
-
     // --- BOTÓN DE DETALLE DE DIVIDENDOS ---
     const toggleBtn = document.getElementById('toggleDividendDetail');
     if (toggleBtn) {
@@ -824,61 +823,59 @@ async function renderPortfolioSummary() {
       fullHtml += `</div></div>`;
     }
 
-    // --- RESUMEN DE VENTAS REALIZADAS (reestructurado) ---
+    // --- RESUMEN DE VENTAS REALIZADAS (reestructurado y corregido) ---
     const sales = transactions.filter(t => t.type === 'sell');
     if (sales.length > 0) {
-      // Agrupar ventas por símbolo para calcular ganancia real (FIFO simple)
-      const salesBySymbol = {};
-      for (const sale of sales) {
-        if (!salesBySymbol[sale.symbol]) {
-          salesBySymbol[sale.symbol] = {
-            symbol: sale.symbol,
-            name: sale.name,
-            assetType: sale.assetType,
-            totalQuantity: 0,
-            totalProceeds: 0,
-            totalCost: 0,
-            sales: []
-          };
-        }
-        salesBySymbol[sale.symbol].sales.push(sale);
-        salesBySymbol[sale.symbol].totalQuantity += sale.quantity;
-        salesBySymbol[sale.symbol].totalProceeds += sale.quantity * sale.buyPrice - (sale.commission || 0);
-      }
+      // Primero, calcular la ganancia de CADA VENTA individual (FIFO simple por símbolo)
+      const salesWithGain = [];
+      const symbols = [...new Set(sales.map(s => s.symbol))];
 
-      // Calcular coste usando FIFO
-      for (const symbol in salesBySymbol) {
-        const group = salesBySymbol[symbol];
+      for (const symbol of symbols) {
+        const symbolSales = sales.filter(s => s.symbol === symbol).sort((a, b) => new Date(a.buyDate) - new Date(b.buyDate));
         const buys = transactions
           .filter(t => t.symbol === symbol && t.type === 'buy')
-          .sort((a, b) => new Date(a.buyDate) - new Date(b.buyDate)); // FIFO
+          .sort((a, b) => new Date(a.buyDate) - new Date(b.buyDate));
 
-        let remainingToSell = group.totalQuantity;
-        let totalCost = 0;
+        let buyIndex = 0;
+        let remainingBuyQty = buys.length > 0 ? buys[0].quantity : 0;
 
-        for (const buy of buys) {
-          if (remainingToSell <= 0) break;
-          const usedQty = Math.min(buy.quantity, remainingToSell);
-          totalCost += usedQty * buy.buyPrice + (buy.commission || 0) * (usedQty / buy.quantity);
-          remainingToSell -= usedQty;
+        for (const sale of symbolSales) {
+          let remainingSaleQty = sale.quantity;
+          let totalCost = 0;
+
+          while (remainingSaleQty > 0 && buyIndex < buys.length) {
+            const buy = buys[buyIndex];
+            const usedQty = Math.min(remainingSaleQty, remainingBuyQty);
+            totalCost += usedQty * buy.buyPrice + (buy.commission || 0) * (usedQty / buy.quantity);
+            remainingSaleQty -= usedQty;
+            remainingBuyQty -= usedQty;
+
+            if (remainingBuyQty <= 0) {
+              buyIndex++;
+              if (buyIndex < buys.length) {
+                remainingBuyQty = buys[buyIndex].quantity;
+              }
+            }
+          }
+
+          const proceeds = sale.quantity * sale.buyPrice - (sale.commission || 0);
+          const gain = proceeds - totalCost;
+          salesWithGain.push({
+            ...sale,
+            gain,
+            year: new Date(sale.buyDate).getFullYear()
+          });
         }
-
-        group.totalCost = totalCost;
-        group.gain = group.totalProceeds - totalCost;
       }
 
-      // Calcular totales y agrupar por año
-      let totalSalesGain = 0;
+      // Ahora agrupar por año y calcular totales
       const salesByYear = {};
+      let totalSalesGain = 0;
 
-      for (const symbol in salesBySymbol) {
-        const sale = salesBySymbol[symbol];
+      for (const sale of salesWithGain) {
+        if (!salesByYear[sale.year]) salesByYear[sale.year] = 0;
+        salesByYear[sale.year] += sale.gain;
         totalSalesGain += sale.gain;
-
-        // Asignar al año de cada venta (usamos la primera venta del grupo como referencia)
-        const year = new Date(sale.sales[0].buyDate).getFullYear();
-        if (!salesByYear[year]) salesByYear[year] = [];
-        salesByYear[year].push(sale);
       }
 
       fullHtml += `<div class="summary-card sales-summary"><div class="group-title">Ventas realizadas</div>`;
@@ -886,12 +883,12 @@ async function renderPortfolioSummary() {
       // ✅ Total general en negrita, sin porcentaje
       fullHtml += `<div class="dividend-line"><strong>Total ventas:</strong> <strong style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}</strong></div>`;
 
-      // Por año
-      if (Object.keys(salesByYear).length > 1) {
+      // ✅ Por año (si hay más de un año o si hay ventas)
+      if (Object.keys(salesByYear).length >= 1) {
         fullHtml += `<div class="dividends-by-year">`;
         const sortedYears = Object.keys(salesByYear).sort((a, b) => b - a);
         for (const year of sortedYears) {
-          const yearGain = salesByYear[year].reduce((sum, s) => sum + s.gain, 0);
+          const yearGain = salesByYear[year];
           fullHtml += `
             <div class="dividend-line">
               <strong>${year}:</strong> 
@@ -904,18 +901,17 @@ async function renderPortfolioSummary() {
         fullHtml += `</div>`;
       }
 
-      // Botón de desglose + detalle
+      // ✅ Botón "Ver detalle" (igual que dividendos)
       fullHtml += `
         <button id="toggleSalesDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
-          Ver desglose
+          Ver detalle
         </button>
         <div id="salesDetail" style="display:none; margin-top:12px;">
       `;
 
-      // Agrupar por tipo para el detalle
+      // Agrupar por tipo para el detalle expandido
       const salesGroups = { stock: [], etf: [], crypto: [] };
-      for (const symbol in salesBySymbol) {
-        const sale = salesBySymbol[symbol];
+      for (const sale of salesWithGain) {
         salesGroups[sale.assetType].push(sale);
       }
 
@@ -923,13 +919,19 @@ async function renderPortfolioSummary() {
         if (list.length === 0) continue;
         const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' }[type];
         fullHtml += `<div class="group-title" style="font-size:1.1rem; margin:12px 0 8px;">${typeName}</div>`;
+        // Agrupar por símbolo dentro del tipo
+        const bySymbol = {};
         for (const s of list) {
-          const color = s.gain >= 0 ? 'green' : 'red';
+          if (!bySymbol[s.symbol]) bySymbol[s.symbol] = 0;
+          bySymbol[s.symbol] += s.gain;
+        }
+        for (const [symbol, gain] of Object.entries(bySymbol)) {
+          const color = gain >= 0 ? 'green' : 'red';
           fullHtml += `
             <div class="dividend-line">
-              <strong>${s.symbol}:</strong> 
+              <strong>${symbol}:</strong> 
               <span style="color:${color}; font-weight:bold;">
-                ${s.gain >= 0 ? '+' : ''}${formatCurrency(s.gain)}
+                ${gain >= 0 ? '+' : ''}${formatCurrency(gain)}
               </span>
             </div>
           `;
@@ -1051,7 +1053,7 @@ async function renderPortfolioSummary() {
         const detail = document.getElementById('salesDetail');
         const isVisible = detail.style.display === 'block';
         detail.style.display = isVisible ? 'none' : 'block';
-        this.textContent = isVisible ? 'Ver desglose' : 'Ocultar desglose';
+        this.textContent = isVisible ? 'Ver detalle' : 'Ocultar detalle';
       };
     }
 
@@ -1116,7 +1118,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-           }
+}
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
