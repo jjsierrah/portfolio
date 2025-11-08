@@ -566,6 +566,7 @@ async function renderPortfolioSummary() {
         e.target.classList.remove('dragging');
       });
     });
+
     // --- BOTÓN DE DETALLE DE DIVIDENDOS ---
     const toggleBtn = document.getElementById('toggleDividendDetail');
     if (toggleBtn) {
@@ -787,8 +788,8 @@ async function renderPortfolioSummary() {
 
       fullHtml += `<div class="summary-card dividends-section"><div class="group-title">Dividendos recibidos</div>`;
 
-      // Total general
-      fullHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+      // ✅ Total en negrita
+      fullHtml += `<div class="dividend-line"><strong>Total:</strong> <strong>${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</strong></div>`;
 
       // Por año
       const divByYear = {};
@@ -804,7 +805,7 @@ async function renderPortfolioSummary() {
         for (const year of sortedYears) {
           const bruto = divByYear[year];
           const neto = bruto * (1 - 0.19);
-          fullHtml += `<div class="dividend-line"><strong>${year}:</strong> ${formatCurrency(bruto)} | ${formatCurrency(neto)} (Neto)</div>`;
+          fullHtml += `<div class="dividend-line"><strong>${year}:</strong> <strong>${formatCurrency(bruto)} | ${formatCurrency(neto)} (Neto)</strong></div>`;
         }
         fullHtml += `</div>`;
       }
@@ -823,7 +824,7 @@ async function renderPortfolioSummary() {
       fullHtml += `</div></div>`;
     }
 
-    // --- RESUMEN DE VENTAS REALIZADAS ---
+    // --- RESUMEN DE VENTAS REALIZADAS (reestructurado) ---
     const sales = transactions.filter(t => t.type === 'sell');
     if (sales.length > 0) {
       // Agrupar ventas por símbolo para calcular ganancia real (FIFO simple)
@@ -866,38 +867,76 @@ async function renderPortfolioSummary() {
         group.gain = group.totalProceeds - totalCost;
       }
 
-      // Agrupar por tipo
-      const salesGroups = { stock: [], etf: [], crypto: [] };
+      // Calcular totales y agrupar por año
       let totalSalesGain = 0;
+      const salesByYear = {};
+
       for (const symbol in salesBySymbol) {
         const sale = salesBySymbol[symbol];
-        salesGroups[sale.assetType].push(sale);
         totalSalesGain += sale.gain;
+
+        // Asignar al año de cada venta (usamos la primera venta del grupo como referencia)
+        const year = new Date(sale.sales[0].buyDate).getFullYear();
+        if (!salesByYear[year]) salesByYear[year] = [];
+        salesByYear[year].push(sale);
       }
 
       fullHtml += `<div class="summary-card sales-summary"><div class="group-title">Ventas realizadas</div>`;
+
+      // ✅ Total general en negrita, sin porcentaje
+      fullHtml += `<div class="dividend-line"><strong>Total ventas:</strong> <strong style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}</strong></div>`;
+
+      // Por año
+      if (Object.keys(salesByYear).length > 1) {
+        fullHtml += `<div class="dividends-by-year">`;
+        const sortedYears = Object.keys(salesByYear).sort((a, b) => b - a);
+        for (const year of sortedYears) {
+          const yearGain = salesByYear[year].reduce((sum, s) => sum + s.gain, 0);
+          fullHtml += `
+            <div class="dividend-line">
+              <strong>${year}:</strong> 
+              <strong style="color:${yearGain >= 0 ? 'green' : 'red'};">
+                ${yearGain >= 0 ? '+' : ''}${formatCurrency(yearGain)}
+              </strong>
+            </div>
+          `;
+        }
+        fullHtml += `</div>`;
+      }
+
+      // Botón de desglose + detalle
+      fullHtml += `
+        <button id="toggleSalesDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
+          Ver desglose
+        </button>
+        <div id="salesDetail" style="display:none; margin-top:12px;">
+      `;
+
+      // Agrupar por tipo para el detalle
+      const salesGroups = { stock: [], etf: [], crypto: [] };
+      for (const symbol in salesBySymbol) {
+        const sale = salesBySymbol[symbol];
+        salesGroups[sale.assetType].push(sale);
+      }
+
       for (const [type, list] of Object.entries(salesGroups)) {
         if (list.length === 0) continue;
         const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' }[type];
-        fullHtml += `<div class="group-title">${typeName}</div>`;
+        fullHtml += `<div class="group-title" style="font-size:1.1rem; margin:12px 0 8px;">${typeName}</div>`;
         for (const s of list) {
           const color = s.gain >= 0 ? 'green' : 'red';
           fullHtml += `
             <div class="dividend-line">
               <strong>${s.symbol}:</strong> 
               <span style="color:${color}; font-weight:bold;">
-                ${s.gain >= 0 ? '+' : ''}${formatCurrency(s.gain)} (${formatPercent(s.gain / s.totalCost || 0)})
+                ${s.gain >= 0 ? '+' : ''}${formatCurrency(s.gain)}
               </span>
             </div>
           `;
         }
       }
-      fullHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
-        <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
-          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}
-        </span>
-      </div>`;
-      fullHtml += `</div>`;
+
+      fullHtml += `</div></div>`;
     }
 
     // --- FILTROS ---
@@ -1005,6 +1044,17 @@ async function renderPortfolioSummary() {
       };
     }
 
+    // --- BOTÓN DE DETALLE DE VENTAS ---
+    const toggleSalesBtn = document.getElementById('toggleSalesDetail');
+    if (toggleSalesBtn) {
+      toggleSalesBtn.onclick = function() {
+        const detail = document.getElementById('salesDetail');
+        const isVisible = detail.style.display === 'block';
+        detail.style.display = isVisible ? 'none' : 'block';
+        this.textContent = isVisible ? 'Ver desglose' : 'Ocultar desglose';
+      };
+    }
+
     // --- LÓGICA DE FILTROS ---
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
@@ -1066,7 +1116,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+           }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
