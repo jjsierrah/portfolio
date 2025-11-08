@@ -823,10 +823,10 @@ async function renderPortfolioSummary() {
       fullHtml += `</div></div>`;
     }
 
-    // --- RESUMEN DE VENTAS REALIZADAS (reestructurado y corregido) ---
+    // --- RESUMEN DE VENTAS REALIZADAS (con porcentaje en detalle) ---
     const sales = transactions.filter(t => t.type === 'sell');
     if (sales.length > 0) {
-      // Primero, calcular la ganancia de CADA VENTA individual (FIFO simple por símbolo)
+      // Calcular ganancia por VENTA (FIFO)
       const salesWithGain = [];
       const symbols = [...new Set(sales.map(s => s.symbol))];
 
@@ -863,12 +863,13 @@ async function renderPortfolioSummary() {
           salesWithGain.push({
             ...sale,
             gain,
+            cost: totalCost,
             year: new Date(sale.buyDate).getFullYear()
           });
         }
       }
 
-      // Ahora agrupar por año y calcular totales
+      // Agrupar por año y símbolo para resumen
       const salesByYear = {};
       let totalSalesGain = 0;
 
@@ -880,10 +881,8 @@ async function renderPortfolioSummary() {
 
       fullHtml += `<div class="summary-card sales-summary"><div class="group-title">Ventas realizadas</div>`;
 
-      // ✅ Total general en negrita, sin porcentaje
       fullHtml += `<div class="dividend-line"><strong>Total ventas:</strong> <strong style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)}</strong></div>`;
 
-      // ✅ Por año (si hay más de un año o si hay ventas)
       if (Object.keys(salesByYear).length >= 1) {
         fullHtml += `<div class="dividends-by-year">`;
         const sortedYears = Object.keys(salesByYear).sort((a, b) => b - a);
@@ -901,7 +900,7 @@ async function renderPortfolioSummary() {
         fullHtml += `</div>`;
       }
 
-      // ✅ Botón "Ver detalle" (igual que dividendos)
+      // === DETALLE CON PORCENTAJE ===
       fullHtml += `
         <button id="toggleSalesDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
           Ver detalle
@@ -909,29 +908,41 @@ async function renderPortfolioSummary() {
         <div id="salesDetail" style="display:none; margin-top:12px;">
       `;
 
-      // Agrupar por tipo para el detalle expandido
-      const salesGroups = { stock: [], etf: [], crypto: [] };
+      // Agrupar por símbolo para mostrar ganancia total y porcentaje
+      const salesBySymbol = {};
       for (const sale of salesWithGain) {
-        salesGroups[sale.assetType].push(sale);
+        if (!salesBySymbol[sale.symbol]) {
+          salesBySymbol[sale.symbol] = {
+            symbol: sale.symbol,
+            assetType: sale.assetType,
+            totalGain: 0,
+            totalCost: 0
+          };
+        }
+        salesBySymbol[sale.symbol].totalGain += sale.gain;
+        salesBySymbol[sale.symbol].totalCost += sale.cost;
+      }
+
+      const salesGroups = { stock: [], etf: [], crypto: [] };
+      for (const symbol in salesBySymbol) {
+        const s = salesBySymbol[symbol];
+        salesGroups[s.assetType].push(s);
       }
 
       for (const [type, list] of Object.entries(salesGroups)) {
         if (list.length === 0) continue;
         const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' }[type];
         fullHtml += `<div class="group-title" style="font-size:1.1rem; margin:12px 0 8px;">${typeName}</div>`;
-        // Agrupar por símbolo dentro del tipo
-        const bySymbol = {};
         for (const s of list) {
-          if (!bySymbol[s.symbol]) bySymbol[s.symbol] = 0;
-          bySymbol[s.symbol] += s.gain;
-        }
-        for (const [symbol, gain] of Object.entries(bySymbol)) {
+          const gain = s.totalGain;
+          const cost = s.totalCost;
+          const pct = cost > 0 ? gain / cost : 0;
           const color = gain >= 0 ? 'green' : 'red';
           fullHtml += `
             <div class="dividend-line">
-              <strong>${symbol}:</strong> 
+              <strong>${s.symbol}:</strong> 
               <span style="color:${color}; font-weight:bold;">
-                ${gain >= 0 ? '+' : ''}${formatCurrency(gain)}
+                ${gain >= 0 ? '+' : ''}${formatCurrency(gain)} (${formatPercent(pct)})
               </span>
             </div>
           `;
@@ -1118,7 +1129,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+          }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
