@@ -32,20 +32,13 @@ function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
-
 function isDateValidAndNotFuture(dateString) {
   if (!dateString) return false;
-
   const inputDate = new Date(dateString);
-  if (isNaN(inputDate.getTime())) return false; // Fecha inválida
-
-  const today = new Date();
-  const inputDateMidnight = new Date(inputDate.setHours(0, 0, 0, 0));
-  const todayMidnight = new Date(today.setHours(0, 0, 0, 0));
-
-  return inputDateMidnight <= todayMidnight;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0); // Hoy a las 00:00:00
+  return inputDate <= todayStart;
 }
-
 function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -230,6 +223,421 @@ function saveCustomOrder(type, symbolList) {
 function loadCustomOrder(type) {
   const orders = JSON.parse(localStorage.getItem('assetOrder') || '{}');
   return orders[type] || [];
+}
+async function renderPortfolioSummary() {
+  const summaryTotals = document.getElementById('summary-totals');
+  const summaryContainer = document.getElementById('summary-by-type');
+  
+  if (!summaryTotals || !summaryContainer) {
+    return;
+  }
+
+  try {
+    const transactions = await db.transactions.toArray();
+    
+    if (transactions.length === 0) {
+      summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
+      summaryContainer.innerHTML = '';
+      return;
+    }
+
+    const symbols = [...new Set(transactions.map(t => t.symbol))];
+    const assets = {};
+    let totalInvested = 0;
+    let totalCurrentValue = 0;
+
+    const currentPrices = {};
+    for (const sym of symbols) {
+      currentPrices[sym] = await getCurrentPrice(sym);
+      if (currentPrices[sym] === null) {
+        const txs = transactions.filter(t => t.symbol === sym);
+        currentPrices[sym] = txs[txs.length - 1]?.buyPrice || 0;
+      }
+    }
+
+    for (const t of transactions) {
+      const key = t.symbol;
+      if (!assets[key]) {
+        assets[key] = {
+          symbol: t.symbol,
+          name: t.name,
+          assetType: t.assetType,
+          totalQuantity: 0,
+          totalInvested: 0
+        };
+      }
+
+      if (t.type === 'buy') {
+        assets[key].totalQuantity += t.quantity;
+        const cost = t.quantity * t.buyPrice + (t.commission || 0);
+        assets[key].totalInvested += cost;
+        totalInvested += cost;
+      } else if (t.type === 'sell') {
+        assets[key].totalQuantity -= t.quantity;
+        const proceeds = t.quantity * t.buyPrice - (t.commission || 0);
+        totalInvested -= proceeds;
+      }
+    }
+
+    let totalGain = 0;
+    for (const symbol in assets) {
+      const a = assets[symbol];
+      if (a.totalQuantity < 0) a.totalQuantity = 0;
+      const currentPrice = currentPrices[symbol] || 0;
+      a.currentValue = a.totalQuantity * currentPrice;
+      totalCurrentValue += a.currentValue;
+      a.gain = a.currentValue - a.totalInvested;
+      totalGain += a.gain;
+    }
+
+    const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
+
+    // --- GRÁFICO DE COMPOSICIÓN ---
+    const groups = { stock: [], etf: [], crypto: [] };
+    Object.values(assets).forEach(asset => {
+      if (asset.totalQuantity > 0) {
+        groups[asset.assetType].push(asset);
+      }
+    });
+
+    let allocationHtml = '';
+    const total = totalCurrentValue;
+    if (total > 0) {
+      const groupShares = {
+        stock: groups.stock.reduce((sum, a) => sum + a.currentValue, 0),
+        etf: groups.etf.reduce((sum, a) => sum + a.currentValue, 0),
+        crypto: groups.crypto.reduce((sum, a) => sum + a.currentValue, 0)
+      };
+      const colors = { stock: '#4CAF50', etf: '#2196F3', crypto: '#FF9800' };
+      const typeNames = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' };
+      
+      allocationHtml = '<div class="portfolio-allocation">';
+      for (const [type, value] of Object.entries(groupShares)) {
+        if (value > 0) {
+          const pct = value / total;
+          const pctFormatted = formatPercent(pct);
+          allocationHtml += `
+            <div class="allocation-item">
+              <div class="allocation-bar">
+                <div class="allocation-fill" style="width:${pct * 100}%; background-color:${colors[type]}"></div>
+              </div>
+              <small>${typeNames[type]}: ${pctFormatted}</small>
+            </div>
+          `;
+        }
+      }
+      allocationHtml += '</div>';
+    }
+
+    const totalsHtml = `
+      <div class="summary-card">
+        <div><strong>Total invertido:</strong> ${formatCurrency(totalInvested)}</div>
+        <div><strong>Valor actual:</strong> ${formatCurrency(totalCurrentValue)}</div>
+        <div><strong>Ganancia:</strong> 
+          <span style="color:${totalGain >= 0 ? 'green' : 'red'}; font-weight: bold;">
+            ${totalGain >= 0 ? '+' : ''}${formatCurrency(totalGain)} (${formatPercent(totalGainPct)})
+          </span>
+        </div>
+        ${allocationHtml}
+      </div>
+    `;
+    summaryTotals.innerHTML = totalsHtml;
+
+    // --- CONSTRUIR EL CONTENIDO EN ORDEN CORRECTO ---
+    let fullHtml = '';
+
+    // --- RESUMEN DE DIVIDENDOS ---
+    const dividends = await db.dividends.toArray();
+    if (dividends.length > 0) {
+      const divSummary = {};
+      let totalBruto = 0;
+      for (const d of dividends) {
+        if (!divSummary[d.symbol]) divSummary[d.symbol] = 0;
+        divSummary[d.symbol] += d.amount;
+        totalBruto += d.amount;
+      }
+      const totalNeto = totalBruto * (1 - 0.19);
+
+      fullHtml += `<div class="summary-card dividends-section"><div class="group-title">Dividendos recibidos</div>`;
+
+      // Total general
+      fullHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
+
+      // Por año
+      const divByYear = {};
+      for (const d of dividends) {
+        const year = new Date(d.date).getFullYear();
+        if (!divByYear[year]) divByYear[year] = 0;
+        divByYear[year] += d.amount;
+      }
+
+      if (Object.keys(divByYear).length > 1) {
+        fullHtml += `<div class="dividends-by-year">`;
+        const sortedYears = Object.keys(divByYear).sort((a, b) => b - a);
+        for (const year of sortedYears) {
+          const bruto = divByYear[year];
+          const neto = bruto * (1 - 0.19);
+          fullHtml += `<div class="dividend-line"><strong>${year}:</strong> ${formatCurrency(bruto)} | ${formatCurrency(neto)} (Neto)</div>`;
+        }
+        fullHtml += `</div>`;
+      }
+
+      // Botón de detalle + contenedor colapsable
+      fullHtml += `
+        <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
+          Ver detalle
+        </button>
+        <div id="dividendDetail" style="display:none; margin-top:12px;">
+      `;
+      for (const [symbol, amount] of Object.entries(divSummary)) {
+        const neto = amount * (1 - 0.19);
+        fullHtml += `<div class="dividend-line"><strong>${symbol}:</strong> ${formatCurrency(amount)} | ${formatCurrency(neto)} (Neto)</div>`;
+      }
+      fullHtml += `</div></div>`;
+    }
+
+    // --- RESUMEN DE VENTAS REALIZADAS ---
+    const sales = transactions.filter(t => t.type === 'sell');
+    if (sales.length > 0) {
+      // Agrupar ventas por símbolo para calcular ganancia real (FIFO simple)
+      const salesBySymbol = {};
+      for (const sale of sales) {
+        if (!salesBySymbol[sale.symbol]) {
+          salesBySymbol[sale.symbol] = {
+            symbol: sale.symbol,
+            name: sale.name,
+            assetType: sale.assetType,
+            totalQuantity: 0,
+            totalProceeds: 0,
+            totalCost: 0,
+            sales: []
+          };
+        }
+        salesBySymbol[sale.symbol].sales.push(sale);
+        salesBySymbol[sale.symbol].totalQuantity += sale.quantity;
+        salesBySymbol[sale.symbol].totalProceeds += sale.quantity * sale.buyPrice - (sale.commission || 0);
+      }
+
+      // Calcular coste usando FIFO
+      for (const symbol in salesBySymbol) {
+        const group = salesBySymbol[symbol];
+        const buys = transactions
+          .filter(t => t.symbol === symbol && t.type === 'buy')
+          .sort((a, b) => new Date(a.buyDate) - new Date(b.buyDate)); // FIFO
+
+        let remainingToSell = group.totalQuantity;
+        let totalCost = 0;
+
+        for (const buy of buys) {
+          if (remainingToSell <= 0) break;
+          const usedQty = Math.min(buy.quantity, remainingToSell);
+          totalCost += usedQty * buy.buyPrice + (buy.commission || 0) * (usedQty / buy.quantity);
+          remainingToSell -= usedQty;
+        }
+
+        group.totalCost = totalCost;
+        group.gain = group.totalProceeds - totalCost;
+      }
+
+      // Agrupar por tipo
+      const salesGroups = { stock: [], etf: [], crypto: [] };
+      let totalSalesGain = 0;
+      for (const symbol in salesBySymbol) {
+        const sale = salesBySymbol[symbol];
+        salesGroups[sale.assetType].push(sale);
+        totalSalesGain += sale.gain;
+      }
+
+      fullHtml += `<div class="summary-card sales-summary"><div class="group-title">Ventas realizadas</div>`;
+      for (const [type, list] of Object.entries(salesGroups)) {
+        if (list.length === 0) continue;
+        const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Cripto' }[type];
+        fullHtml += `<div class="group-title">${typeName}</div>`;
+        for (const s of list) {
+          const color = s.gain >= 0 ? 'green' : 'red';
+          fullHtml += `
+            <div class="dividend-line">
+              <strong>${s.symbol}:</strong> 
+              <span style="color:${color}; font-weight:bold;">
+                ${s.gain >= 0 ? '+' : ''}${formatCurrency(s.gain)} (${formatPercent(s.gain / s.totalCost || 0)})
+              </span>
+            </div>
+          `;
+        }
+      }
+      fullHtml += `<div class="dividend-line divider"><strong>Total ventas:</strong> 
+        <span style="color:${totalSalesGain >= 0 ? 'green' : 'red'}; font-weight:bold;">
+          ${totalSalesGain >= 0 ? '+' : ''}${formatCurrency(totalSalesGain)} (${formatPercent(totalSalesGain / (totalInvested + totalSalesGain) || 0)})
+        </span>
+      </div>`;
+      fullHtml += `</div>`;
+    }
+
+    // --- FILTROS ---
+    fullHtml += `
+      <div class="filters-container">
+        <button class="filter-btn active" data-filter="all">Todo</button>
+        <button class="filter-btn stock" data-filter="stock">Acciones</button>
+        <button class="filter-btn etf" data-filter="etf">ETFs</button>
+        <button class="filter-btn crypto" data-filter="crypto">Cripto</button>
+      </div>
+    `;
+
+    // --- TARJETAS POR TIPO ---
+    let groupsHtml = '';
+    for (const [type, list] of Object.entries(groups)) {
+      if (list.length === 0) continue;
+      const typeName = { stock: 'Acciones', etf: 'ETFs', crypto: 'Criptomonedas' }[type];
+      
+      // Cargar orden personalizado
+      const customOrder = loadCustomOrder(type);
+      const orderedList = [...list].sort((a, b) => {
+        const aIndex = customOrder.indexOf(a.symbol);
+        const bIndex = customOrder.indexOf(b.symbol);
+        if (aIndex === -1 && bIndex === -1) return 0;
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+
+      groupsHtml += `<div class="group-title">${typeName}</div>`;
+      groupsHtml += `<div class="asset-list" data-type="${type}">`;
+      for (const a of orderedList) {
+        const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
+        const gainIcon = a.gain >= 0 ? '📈' : '📉';
+        const gainColor = a.gain >= 0 ? 'green' : 'red';
+        const typeClass = type;
+        groupsHtml += `
+          <div class="asset-item ${typeClass}" data-type="${type}" data-symbol="${a.symbol}" draggable="true">
+            <strong>${a.symbol}</strong> ${a.name ? `(${a.name})` : ''}<br>
+            Acciones: ${formatNumber(a.totalQuantity)} | 
+            Invertido: ${formatCurrency(a.totalInvested)} | 
+            Actual: ${formatCurrency(a.currentValue)} | 
+            Ganancia: <span style="color:${gainColor}; font-weight:bold;">
+              ${gainIcon} ${a.gain >= 0 ? '+' : ''}${formatCurrency(a.gain)} (${formatPercent(gainPct)})
+            </span>
+          </div>
+        `;
+      }
+      groupsHtml += `</div>`;
+    }
+    fullHtml += groupsHtml;
+
+    // --- RENDERIZAR TODO JUNTO ---
+    summaryContainer.innerHTML = fullHtml;
+
+    // --- LÓGICA DE DRAG & DROP ---
+    document.querySelectorAll('.asset-list').forEach(list => {
+      list.addEventListener('dragstart', e => {
+        if (e.target.classList.contains('asset-item')) {
+          e.target.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', e.target.dataset.symbol);
+          e.dataTransfer.effectAllowed = 'move';
+        }
+      });
+
+      list.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+
+      list.addEventListener('dragenter', e => {
+        e.preventDefault();
+      });
+
+      list.addEventListener('drop', e => {
+        e.preventDefault();
+        const dragging = document.querySelector('.dragging');
+        if (dragging) {
+          const target = e.target.closest('.asset-item');
+          if (target && target !== dragging) {
+            const rect = target.getBoundingClientRect();
+            const next = rect.y + rect.height / 2 < e.clientY ? target.nextSibling : target;
+            list.insertBefore(dragging, next);
+            
+            const type = list.dataset.type;
+            const symbols = Array.from(list.children).map(el => el.dataset.symbol);
+            saveCustomOrder(type, symbols);
+          }
+        }
+      });
+
+      list.addEventListener('dragend', e => {
+        e.target.classList.remove('dragging');
+      });
+    });
+    // --- BOTÓN DE DETALLE DE DIVIDENDOS ---
+    const toggleBtn = document.getElementById('toggleDividendDetail');
+    if (toggleBtn) {
+      toggleBtn.onclick = function() {
+        const detail = document.getElementById('dividendDetail');
+        const isVisible = detail.style.display === 'block';
+        detail.style.display = isVisible ? 'none' : 'block';
+        this.textContent = isVisible ? 'Ver detalle' : 'Ocultar detalle';
+      };
+    }
+
+    // --- LÓGICA DE FILTROS ---
+    const filterButtons = document.querySelectorAll('.filter-btn');
+    filterButtons.forEach(btn => {
+      btn.onclick = () => {
+        const filter = btn.dataset.filter;
+        filterButtons.forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.asset-item').forEach(item => {
+          item.style.display = (filter === 'all' || item.dataset.type === filter) ? 'block' : 'none';
+        });
+        document.querySelectorAll('.group-title:not(.dividends-section .group-title):not(.sales-summary .group-title)').forEach(title => {
+          let sibling = title.nextElementSibling;
+          let hasVisible = false;
+          while (sibling && !sibling.classList.contains('group-title')) {
+            if (sibling.classList.contains('asset-item') && sibling.style.display !== 'none') {
+              hasVisible = true;
+              break;
+            }
+            sibling = sibling.nextElementSibling;
+          }
+          title.style.display = hasVisible ? 'block' : 'none';
+        });
+      };
+    });
+  } catch (err) {
+    console.error('Error en renderPortfolioSummary:', err);
+    summaryTotals.innerHTML = '<p style="color:red">Error al cargar el portfolio. Ver consola.</p>';
+    if (summaryContainer) summaryContainer.innerHTML = '';
+  }
+}
+
+function openModal(title, content) {
+  let overlay = document.getElementById('modalOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modalOverlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+
+  overlay.innerHTML = `
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>${title}</h3>
+        <button class="close-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        ${content}
+      </div>
+    </div>
+  `;
+
+  overlay.style.display = 'flex';
+
+  const closeModal = () => {
+    overlay.style.display = 'none';
+  };
+
+  document.querySelector('.close-modal').onclick = closeModal;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) closeModal();
+  };
 }
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
@@ -658,7 +1066,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-        }
+}
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
@@ -1249,6 +1657,82 @@ function showImportExport() {
   };
 }
 
+// --- NUEVA FUNCIÓN: Exportar resumen a PDF ---
+async function exportSummaryToPDF() {
+  const existing = document.getElementById('pdf-toast');
+  if (existing) return;
+
+  const summaryEl = document.getElementById('portfolio-summary');
+  if (!summaryEl) {
+    showToast('No hay resumen para exportar.');
+    return;
+  }
+
+  // Clonar y forzar tema claro
+  const clone = summaryEl.cloneNode(true);
+  clone.id = 'pdf-summary-clone';
+  clone.style.position = 'fixed';
+  clone.style.top = '-10000px';
+  clone.style.left = '-10000px';
+  clone.style.width = '700px';
+  clone.style.backgroundColor = '#fff';
+  clone.style.color = '#000';
+  clone.style.padding = '20px';
+  clone.style.borderRadius = '0';
+  clone.style.boxShadow = 'none';
+  clone.style.fontFamily = 'Arial, sans-serif';
+  clone.setAttribute('data-theme', 'light');
+
+  // Limpiar estilos oscuros
+  const allElements = clone.querySelectorAll('*');
+  allElements.forEach(el => {
+    el.style.backgroundColor = '';
+    el.style.color = '';
+    el.style.borderColor = '';
+  });
+
+  document.body.appendChild(clone);
+
+  try {
+    const canvas = await html2canvas(clone, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new window.jspdf.jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const imgWidth = 210;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= 297;
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= 297;
+    }
+
+    pdf.save(`JJ-Portfolio-${new Date().toISOString().slice(0,10)}.pdf`);
+    showToast('✅ PDF generado correctamente.');
+  } catch (err) {
+    console.error('Error generando PDF:', err);
+    showToast('❌ Error al generar PDF.');
+  } finally {
+    if (clone.parentNode) clone.parentNode.removeChild(clone);
+  }
+}
+
 // --- Tema claro/oscuro ---
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
@@ -1284,7 +1768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPortfolioSummary();
   });
 
-  // Reemplazar el menú select por drawer
+  // Menú drawer
   function openDrawer() {
     let drawer = document.getElementById('mainDrawer');
     if (!drawer) {
@@ -1304,19 +1788,18 @@ document.addEventListener('DOMContentLoaded', () => {
             <li><button data-action="view-transactions"><span>📋 Transacciones</span></button></li>
             <li><button data-action="add-dividend"><span>💰 Añadir Dividendo</span></button></li>
             <li><button data-action="view-dividends"><span>📊 Dividendos</span></button></li>
+            <li><button data-action="export-pdf"><span>📄 Exportar Resumen (PDF)</span></button></li>
             <li><button data-action="import-export"><span>📤 Exportar / Importar</span></button></li>
           </ul>
         </div>
       `;
       document.body.appendChild(drawer);
 
-      // Cerrar al hacer clic en X o fuera
       drawer.querySelector('.close-drawer').onclick = () => drawer.style.display = 'none';
       drawer.onclick = (e) => {
         if (e.target === drawer) drawer.style.display = 'none';
       };
 
-      // Acciones
       drawer.querySelectorAll('button[data-action]').forEach(btn => {
         btn.onclick = () => {
           const action = btn.dataset.action;
@@ -1327,6 +1810,7 @@ document.addEventListener('DOMContentLoaded', () => {
           else if (action === 'view-dividends') showDividendsList();
           else if (action === 'refresh-prices') refreshPrices();
           else if (action === 'manual-price') showManualPriceUpdate();
+          else if (action === 'export-pdf') exportSummaryToPDF();
           else if (action === 'import-export') showImportExport();
         };
       });
@@ -1336,6 +1820,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('menuToggle')?.addEventListener('click', openDrawer);
 
-  // Inicializar tema al cargar
+  // Inicializar tema
   initTheme();
 });
