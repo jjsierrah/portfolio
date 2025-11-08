@@ -1284,20 +1284,57 @@ document.addEventListener('DOMContentLoaded', () => {
     renderPortfolioSummary();
   });
 
-  const menu = document.getElementById('mainMenu');
-  if (menu) {
-    menu.addEventListener('change', function () {
-      const v = this.value;
-      this.selectedIndex = 0;
-      if (v === 'add-transaction') showAddTransactionForm();
-      else if (v === 'view-transactions') showTransactionsList();
-      else if (v === 'add-dividend') showAddDividendForm();
-      else if (v === 'view-dividends') showDividendsList();
-      else if (v === 'refresh-prices') refreshPrices();
-      else if (v === 'manual-price') showManualPriceUpdate();
-      else if (v === 'import-export') showImportExport();
-    });
+  // Reemplazar el menú select por drawer
+  function openDrawer() {
+    let drawer = document.getElementById('mainDrawer');
+    if (!drawer) {
+      drawer = document.createElement('div');
+      drawer.id = 'mainDrawer';
+      drawer.className = 'main-drawer';
+      drawer.innerHTML = `
+        <div class="drawer-content">
+          <div class="drawer-header">
+            <h3>Menú</h3>
+            <button class="close-drawer">&times;</button>
+          </div>
+          <ul class="drawer-menu">
+            <li><button data-action="refresh-prices"><span>🔄 Actualizar Precios</span></button></li>
+            <li><button data-action="manual-price"><span>✏️ Actualizar Precio Manual</span></button></li>
+            <li><button data-action="add-transaction"><span>➕ Añadir Transacción</span></button></li>
+            <li><button data-action="view-transactions"><span>📋 Transacciones</span></button></li>
+            <li><button data-action="add-dividend"><span>💰 Añadir Dividendo</span></button></li>
+            <li><button data-action="view-dividends"><span>📊 Dividendos</span></button></li>
+            <li><button data-action="import-export"><span>📤 Exportar / Importar</span></button></li>
+          </ul>
+        </div>
+      `;
+      document.body.appendChild(drawer);
+
+      // Cerrar al hacer clic en X o fuera
+      drawer.querySelector('.close-drawer').onclick = () => drawer.style.display = 'none';
+      drawer.onclick = (e) => {
+        if (e.target === drawer) drawer.style.display = 'none';
+      };
+
+      // Acciones
+      drawer.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.onclick = () => {
+          const action = btn.dataset.action;
+          drawer.style.display = 'none';
+          if (action === 'add-transaction') showAddTransactionForm();
+          else if (action === 'view-transactions') showTransactionsList();
+          else if (action === 'add-dividend') showAddDividendForm();
+          else if (action === 'view-dividends') showDividendsList();
+          else if (action === 'refresh-prices') refreshPrices();
+          else if (action === 'manual-price') showManualPriceUpdate();
+          else if (action === 'import-export') showImportExport();
+        };
+      });
+    }
+    drawer.style.display = 'flex';
   }
+
+  document.getElementById('menuToggle')?.addEventListener('click', openDrawer);
 
   // Inicializar tema al cargar
   initTheme();
