@@ -660,7 +660,15 @@ function openModal(title, content) {
   };
         }
 async function showAddTransactionForm() {
-  const symbols = await db.transactions.orderBy('symbol').uniqueKeys();
+  // Cargar todos los nombres únicos por tipo
+  const allTransactions = await db.transactions.toArray();
+  const namesByType = {
+    stock: [...new Set(allTransactions.filter(t => t.assetType === 'stock').map(t => t.name).filter(n => n))],
+    etf: [...new Set(allTransactions.filter(t => t.assetType === 'etf').map(t => t.name).filter(n => n))],
+    crypto: [...new Set(allTransactions.filter(t => t.assetType === 'crypto').map(t => t.name).filter(n => n))]
+  };
+
+  const symbols = [...new Set(allTransactions.map(t => t.symbol))];
   const symbolOptions = symbols.map(s => `<option value="${s}">`).join('');
 
   const form = `
@@ -686,7 +694,8 @@ async function showAddTransactionForm() {
     </div>
     <div class="form-group">
       <label>Nombre (opcional):</label>
-      <input type="text" id="name" placeholder="Apple Inc." />
+      <input type="text" id="name" list="names" placeholder="Ej: Banco Bilbao, Bitcoin..." />
+      <datalist id="names"></datalist>
     </div>
     <div class="form-group">
       <label>Cantidad:</label>
@@ -707,6 +716,19 @@ async function showAddTransactionForm() {
     <button id="btnSaveTransaction" class="btn-primary">Añadir Transacción</button>
   `;
   openModal('Añadir Transacción', form);
+
+  const assetTypeSelect = document.getElementById('assetType');
+  const nameInput = document.getElementById('name');
+  const namesDatalist = document.getElementById('names');
+
+  function updateNameSuggestions() {
+    const type = assetTypeSelect.value;
+    const names = namesByType[type] || [];
+    namesDatalist.innerHTML = names.map(n => `<option value="${n}">`).join('');
+  }
+
+  assetTypeSelect.addEventListener('change', updateNameSuggestions);
+  updateNameSuggestions(); // Inicial
 
   document.getElementById('btnSaveTransaction').onclick = async () => {
     const symbol = document.getElementById('symbol').value.trim().toUpperCase();
