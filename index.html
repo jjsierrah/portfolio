@@ -11,17 +11,20 @@
 <body>
   <header>
     <h1>💼 JJ Portfolio</h1>
-    <button id="themeToggle" aria-label="Cambiar tema">🌙</button>
-    <select id="mainMenu">
-      <option value="">— Menú —</option>
-      <option value="refresh-prices">🔄 Actualizar Precios</option>
-      <option value="manual-price">✏️ Actualizar Precio Manual</option>
-      <option value="add-transaction">➕ Añadir Transacción</option>
-      <option value="view-transactions">📋 Transacciones</option>
-      <option value="add-dividend">💰 Añadir Dividendo</option>
-      <option value="view-dividends">📊 Dividendos</option>
-      <option value="import-export">📤 Exportar / Importar</option>
-    </select>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button id="themeToggle" aria-label="Cambiar tema">🌙</button>
+      <button id="menuToggle" aria-label="Abrir menú" style="
+        background: none;
+        border: none;
+        font-size: 1.8rem;
+        color: var(--text-primary);
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">☰</button>
+    </div>
   </header>
 
   <main>
