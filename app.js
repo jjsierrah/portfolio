@@ -1129,7 +1129,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-          }
+        }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
@@ -1720,6 +1720,39 @@ function showImportExport() {
   };
 }
 
+// --- NUEVA FUNCIÓN: Ayuda ---
+function showHelp() {
+  const content = `
+    <h3>Ayuda - JJ Portfolio</h3>
+    <p><strong>Versión: 1.0</strong></p>
+    <p>Aplicación PWA para gestionar tu cartera de inversiones con total privacidad.</p>
+    
+    <h4>✅ Funcionalidades</h4>
+    <ul>
+      <li>📈 Gestión de acciones, ETFs y criptomonedas</li>
+      <li>💰 Registro de dividendos (con cálculo neto –19%)</li>
+      <li>📊 Seguimiento de ventas y ganancias (método FIFO)</li>
+      <li>🔄 Actualización automática de precios (Yahoo Finance / CoinGecko)</li>
+      <li>📁 Comisiones incluidas en compras y ventas</li>
+      <li>📤 Exportar a JSON o PDF (resumen imprimible)</li>
+      <li>🌙 Tema claro/oscuro + reordenar con arrastrar y soltar</li>
+    </ul>
+
+    <h4>🔒 Privacidad</h4>
+    <p>Tus datos <strong>se guardan solo en tu dispositivo</strong>.<br>
+    No se envían ni almacenan en ningún servidor.</p>
+
+    <h4>📱 Instalación</h4>
+    <p>En Chrome para Android: menú → <em>"Añadir a pantalla de inicio"</em>.</p>
+
+    <p style="margin-top:20px; font-size:0.9rem; color:#666;">
+      Desarrollado por JJ Sierra – 2025
+    </p>
+  `;
+
+  openModal('Ayuda', content);
+}
+
 // --- NUEVA FUNCIÓN: Exportar resumen a PDF ---
 async function exportSummaryToPDF() {
   const existing = document.getElementById('pdf-toast');
@@ -1853,6 +1886,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <li><button data-action="view-dividends"><span>📊 Dividendos</span></button></li>
             <li><button data-action="export-pdf"><span>📄 Exportar Resumen (PDF)</span></button></li>
             <li><button data-action="import-export"><span>📤 Exportar / Importar</span></button></li>
+            <li><button data-action="help"><span>ℹ️ Ayuda</span></button></li>
           </ul>
         </div>
       `;
@@ -1875,6 +1909,7 @@ document.addEventListener('DOMContentLoaded', () => {
           else if (action === 'manual-price') showManualPriceUpdate();
           else if (action === 'export-pdf') exportSummaryToPDF();
           else if (action === 'import-export') showImportExport();
+          else if (action === 'help') showHelp();
         };
       });
     }
