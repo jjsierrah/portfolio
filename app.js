@@ -162,11 +162,15 @@ async function fetchStockPrice(symbol) {
 
   const trySymbol = async (sym) => {
     try {
-      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`;
-      const res = await fetch(url);
+      // Usar proxy CORS para evitar bloqueos
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
+        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`
+      )}`;
+      const res = await fetch(proxyUrl);
       if (!res.ok) return null;
       const data = await res.json();
-      const quote = data.quoteResponse?.result?.[0];
+      const parsed = JSON.parse(data.contents);
+      const quote = parsed.quoteResponse?.result?.[0];
       return quote?.regularMarketPrice || null;
     } catch {
       return null;
@@ -566,6 +570,7 @@ async function renderPortfolioSummary() {
         e.target.classList.remove('dragging');
       });
     });
+
     // --- BOTÓN DE DETALLE DE DIVIDENDOS ---
     const toggleBtn = document.getElementById('toggleDividendDetail');
     if (toggleBtn) {
@@ -1129,7 +1134,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-        }
+              }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
