@@ -32,13 +32,20 @@ function today() {
   const d = new Date();
   return d.toISOString().split('T')[0];
 }
+
 function isDateValidAndNotFuture(dateString) {
   if (!dateString) return false;
+
   const inputDate = new Date(dateString);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0); // Hoy a las 00:00:00
-  return inputDate <= todayStart;
+  if (isNaN(inputDate.getTime())) return false; // Fecha inválida
+
+  const today = new Date();
+  const inputDateMidnight = new Date(inputDate.setHours(0, 0, 0, 0));
+  const todayMidnight = new Date(today.setHours(0, 0, 0, 0));
+
+  return inputDateMidnight <= todayMidnight;
 }
+
 function formatDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -146,47 +153,84 @@ function showConfirm(message, onConfirm) {
   };
 }
 
+// --- Gestión de API key de Alpha Vantage ---
+function getAlphaVantageKey() {
+  return localStorage.getItem('alphaVantageKey') || null;
+}
+
+function saveAlphaVantageKey(key) {
+  if (key && key.trim()) {
+    localStorage.setItem('alphaVantageKey', key.trim());
+  }
+}
+
+async function requestAlphaVantageKey() {
+  return new Promise((resolve) => {
+    const form = `
+      <p>Alpha Vantage es necesario para actualizar precios de acciones y ETFs.</p>
+      <p>Obtén una clave gratis en <a href="https://www.alphavantage.co/support/#api-key" target="_blank">alphavantage.co</a>.</p>
+      <div class="form-group">
+        <label>API Key:</label>
+        <input type="text" id="apiKeyInput" placeholder="Ej: demo o tu clave" style="width:100%; padding:10px; margin:8px 0;" />
+      </div>
+      <button id="btnSaveKey" class="btn-primary">Guardar y continuar</button>
+      <button id="btnSkipKey" class="btn-delete" style="margin-left:8px;">Saltar (solo hoy)</button>
+    `;
+    openModal('🔑 Clave de Alpha Vantage', form);
+
+    const saveBtn = document.getElementById('btnSaveKey');
+    const skipBtn = document.getElementById('btnSkipKey');
+    const input = document.getElementById('apiKeyInput');
+
+    saveBtn.onclick = () => {
+      const key = input.value.trim();
+      if (key) {
+        saveAlphaVantageKey(key);
+        document.getElementById('modalOverlay').style.display = 'none';
+        resolve(key);
+      } else {
+        showToast('Por favor, introduce una clave.');
+      }
+    };
+
+    skipBtn.onclick = () => {
+      document.getElementById('modalOverlay').style.display = 'none';
+      resolve(null);
+    };
+
+    // Permitir Enter
+    input.onkeypress = (e) => {
+      if (e.key === 'Enter') saveBtn.click();
+    };
+  });
+}
+
+// --- FUNCIONES PARA PRECIOS CON ALPHA VANTAGE ---
 async function fetchStockPrice(symbol) {
-  const symbolMap = {
-    'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
-    'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
-    'FER': 'FER.MC', 'CABK': 'CABK.MC', 'MAP': 'MAP.MC',
-    'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA', 'AI': 'AI.PA',
-    'DG': 'DG.PA', 'RI': 'RI.PA', 'FP': 'FP.PA',
-    'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE', 'BMW': 'BMW.DE',
-    'DAI': 'DAI.DE', 'SIE': 'SIE.DE',
-    'ENI': 'ENI.MI', 'ISP': 'ISP.MI', 'UCG': 'UCG.MI', 'STM': 'STM.MI',
-    'ASML': 'ASML.AS', 'RDSA': 'RDSA.AS',
-    'NESN': 'NESN.SW', 'ROG': 'ROG.SW'
-  };
-
-  const trySymbol = async (sym) => {
-    try {
-      // Usar proxy CORS para evitar bloqueos
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
-        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(sym)}`
-      )}`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) return null;
-      const data = await res.json();
-      const parsed = JSON.parse(data.contents);
-      const quote = parsed.quoteResponse?.result?.[0];
-      return quote?.regularMarketPrice || null;
-    } catch {
-      return null;
-    }
-  };
-
-  let price = await trySymbol(symbol);
-  if (price !== null) return price;
-
-  const mapped = symbolMap[symbol.toUpperCase()];
-  if (mapped) {
-    price = await trySymbol(mapped);
-    if (price !== null) return price;
+  let API_KEY = getAlphaVantageKey();
+  if (!API_KEY) {
+    // Si no hay clave guardada, pedirla
+    API_KEY = await requestAlphaVantageKey();
+    if (!API_KEY) return null;
   }
 
-  return null;
+  try {
+    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const priceStr = data['Global Quote']?.['05. price'];
+    if (!priceStr) return null;
+    const price = parseFloat(priceStr);
+    return price > 0 ? price : null;
+  } catch (err) {
+    console.warn(`Alpha Vantage error para ${symbol}:`, err.message);
+    // Si falla por clave inválida, borrarla
+    if (err.message?.includes('403') || err.message?.includes('invalid')) {
+      localStorage.removeItem('alphaVantageKey');
+    }
+    return null;
+  }
 }
 
 async function fetchCryptoPrice(symbol) {
@@ -203,7 +247,8 @@ async function fetchCryptoPrice(symbol) {
     if (!res.ok) return null;
     const data = await res.json();
     return data[id]?.eur || null;
-  } catch {
+  } catch (err) {
+    console.warn(`Error al obtener precio de cripto ${symbol}:`, err.message);
     return null;
   }
 }
@@ -349,7 +394,8 @@ async function renderPortfolioSummary() {
 
     // --- CONSTRUIR EL CONTENIDO EN ORDEN CORRECTO ---
     let fullHtml = '';
-        // --- RESUMEN DE DIVIDENDOS ---
+
+    // --- RESUMEN DE DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
     if (dividends.length > 0) {
       const divSummary = {};
@@ -642,7 +688,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+                               }
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryContainer = document.getElementById('summary-by-type');
@@ -1133,7 +1179,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-        }
+}
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
@@ -1734,7 +1780,7 @@ function showImportExport() {
   };
 }
 
-// --- NUEVA FUNCIÓN: Ayuda ---
+// --- NUEVA FUNCIÓN: Ayuda (con gestión de clave) ---
 function showHelp() {
   const content = `
     <h3>Ayuda - JJ Portfolio</h3>
@@ -1746,7 +1792,7 @@ function showHelp() {
       <li>📈 Gestión de acciones, ETFs y criptomonedas</li>
       <li>💰 Registro de dividendos (con cálculo neto –19%)</li>
       <li>📊 Seguimiento de ventas y ganancias (método FIFO)</li>
-      <li>🔄 Actualización automática de precios (Yahoo Finance / CoinGecko)</li>
+      <li>🔄 Actualización automática de precios (Alpha Vantage / CoinGecko)</li>
       <li>📁 Comisiones incluidas en compras y ventas</li>
       <li>📤 Exportar a JSON o PDF (resumen imprimible)</li>
       <li>🌙 Tema claro/oscuro + reordenar con arrastrar y soltar</li>
@@ -1759,12 +1805,36 @@ function showHelp() {
     <h4>📱 Instalación</h4>
     <p>En Chrome para Android: menú → <em>"Añadir a pantalla de inicio"</em>.</p>
 
+    <h4>🔑 Clave de Alpha Vantage</h4>
+    <p>Tu clave se guarda solo en este dispositivo.</p>
+    <button id="btnManageKey" class="btn-primary" style="margin-top:10px; padding:8px; font-size:0.95rem;">Gestionar clave</button>
+
     <p style="margin-top:20px; font-size:0.9rem; color:#666;">
       Desarrollado por JJ Sierra – 2025
     </p>
   `;
 
   openModal('Ayuda', content);
+
+  // Gestionar clave después de abrir el modal
+  setTimeout(() => {
+    const manageBtn = document.getElementById('btnManageKey');
+    if (manageBtn) {
+      manageBtn.onclick = () => {
+        const current = localStorage.getItem('alphaVantageKey') || '';
+        const newKey = prompt('Introduce tu API key de Alpha Vantage (deja vacío para borrar):', current);
+        if (newKey === null) return; // Cancelado
+        if (newKey.trim() === '') {
+          localStorage.removeItem('alphaVantageKey');
+          showToast('Clave eliminada.');
+        } else {
+          localStorage.setItem('alphaVantageKey', newKey.trim());
+          showToast('Clave guardada.');
+        }
+        document.getElementById('modalOverlay').style.display = 'none';
+      };
+    }
+  }, 100);
 }
 
 // --- NUEVA FUNCIÓN: Exportar resumen a PDF ---
