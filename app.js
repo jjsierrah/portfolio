@@ -349,8 +349,7 @@ async function renderPortfolioSummary() {
 
     // --- CONSTRUIR EL CONTENIDO EN ORDEN CORRECTO ---
     let fullHtml = '';
-
-    // --- RESUMEN DE DIVIDENDOS ---
+        // --- RESUMEN DE DIVIDENDOS ---
     const dividends = await db.dividends.toArray();
     if (dividends.length > 0) {
       const divSummary = {};
@@ -1134,7 +1133,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-              }
+        }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
@@ -1569,17 +1568,27 @@ async function refreshPrices() {
     return;
   }
 
-  const symbols = [...new Set(transactions.map(t => t.symbol))];
+  // Agrupar por símbolo y obtener el assetType (asumiendo que es consistente)
+  const symbolsInfo = {};
+  for (const t of transactions) {
+    if (!symbolsInfo[t.symbol]) {
+      symbolsInfo[t.symbol] = t.assetType;
+    }
+  }
+
+  const symbols = Object.keys(symbolsInfo);
   let updated = 0;
 
   for (const symbol of symbols) {
     let price = null;
-    const tx = transactions.find(t => t.symbol === symbol);
-    if (tx && tx.assetType === 'crypto') {
+    const assetType = symbolsInfo[symbol];
+
+    if (assetType === 'crypto') {
       price = await fetchCryptoPrice(symbol);
     } else {
       price = await fetchStockPrice(symbol);
     }
+
     if (price !== null) {
       await saveCurrentPrice(symbol, price);
       updated++;
