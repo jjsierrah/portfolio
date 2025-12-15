@@ -205,32 +205,98 @@ async function requestAlphaVantageKey() {
   });
 }
 
-// --- FUNCIONES PARA PRECIOS CON ALPHA VANTAGE ---
+// --- CONVERSIÓN USD → EUR (estricta, sin fallback) ---
+let usdToEurCache = null;
+let usdToEurTimestamp = 0;
+
+async function getUsdToEurRate() {
+  const now = Date.now();
+  // Reutilizar caché si tiene menos de 1 hora
+  if (usdToEurCache && now - usdToEurTimestamp < 3600000) {
+    return usdToEurCache;
+  }
+
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=eur');
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rate = data.usd?.eur;
+    if (rate && rate > 0.5 && rate < 1.5) { // Rango razonable
+      usdToEurCache = rate;
+      usdToEurTimestamp = now;
+      return rate;
+    }
+  } catch (err) {
+    console.warn('⚠️ No se pudo obtener USD/EUR.');
+  }
+  return null; // ❌ Sin fallback: si falla, no hay tipo de cambio
+}
+
+// --- FUNCIONES PARA PRECIOS CON ALPHA VANTAGE + CONVERSIÓN SEGURA ---
 async function fetchStockPrice(symbol) {
   let API_KEY = getAlphaVantageKey();
   if (!API_KEY) {
-    // Si no hay clave guardada, pedirla
     API_KEY = await requestAlphaVantageKey();
     if (!API_KEY) return null;
   }
 
-  try {
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(symbol)}&apikey=${API_KEY}`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const priceStr = data['Global Quote']?.['05. price'];
-    if (!priceStr) return null;
-    const price = parseFloat(priceStr);
-    return price > 0 ? price : null;
-  } catch (err) {
-    console.warn(`Alpha Vantage error para ${symbol}:`, err.message);
-    // Si falla por clave inválida, borrarla
-    if (err.message?.includes('403') || err.message?.includes('invalid')) {
-      localStorage.removeItem('alphaVantageKey');
+  // Probar en orden: 1) símbolo original, 2) con sufijo
+  const attempts = [symbol];
+  const symbolMap = {
+    'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
+    'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
+    'FER': 'FER.MC', 'CABK': 'CABK.MC', 'MAP': 'MAP.MC',
+    'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA', 'AI': 'AI.PA',
+    'DG': 'DG.PA', 'RI': 'RI.PA', 'FP': 'FP.PA',
+    'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE', 'BMW': 'BMW.DE',
+    'DAI': 'DAI.DE', 'SIE': 'SIE.DE',
+    'ENI': 'ENI.MI', 'ISP': 'ISP.MI', 'UCG': 'UCG.MI', 'STM': 'STM.MI',
+    'ASML': 'ASML.AS', 'RDSA': 'RDSA.AS',
+    'NESN': 'NESN.SW', 'ROG': 'ROG.SW'
+  };
+
+  const mapped = symbolMap[symbol.toUpperCase()];
+  if (mapped && !attempts.includes(mapped)) {
+    attempts.push(mapped);
+  }
+
+  let priceUsd = null;
+  let usedSymbol = null;
+
+  for (const sym of attempts) {
+    try {
+      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${API_KEY}`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const priceStr = data['Global Quote']?.['05. price'];
+      if (priceStr) {
+        const price = parseFloat(priceStr);
+        if (price > 0) {
+          priceUsd = price;
+          usedSymbol = sym;
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn(`Alpha Vantage falló para ${sym}:`, err.message);
     }
+  }
+
+  if (priceUsd === null) {
     return null;
   }
+
+  // 🔑 Conversión obligatoria: si falla, no devolver precio
+  const usdToEur = await getUsdToEurRate();
+  if (usdToEur === null) {
+    console.warn(`❌ No se pudo convertir ${usedSymbol} a EUR. Precio no actualizado.`);
+    return null; // 🚫 No guardar precio si no hay conversión
+  }
+
+  const priceEur = priceUsd * usdToEur;
+  console.log(`✅ ${usedSymbol}: ${priceUsd} USD → ${priceEur.toFixed(4)} EUR`);
+  return priceEur;
 }
 
 async function fetchCryptoPrice(symbol) {
@@ -285,7 +351,7 @@ async function renderPortfolioSummary() {
     const transactions = await db.transactions.toArray();
     
     if (transactions.length === 0) {
-      summaryTotals.innerHTML = '<p>No hay transacciones. Añade una desde el menú.</p>';
+      summaryTotals.innerHTML = '<p>No hay transacciones. AÃ±ade una desde el menÃº.</p>';
       summaryContainer.innerHTML = '';
       return;
     }
@@ -341,7 +407,7 @@ async function renderPortfolioSummary() {
 
     const totalGainPct = totalInvested > 0 ? totalGain / totalInvested : 0;
 
-    // --- GRÁFICO DE COMPOSICIÓN ---
+    // --- GRÃFICO DE COMPOSICIÃ“N ---
     const groups = { stock: [], etf: [], crypto: [] };
     Object.values(assets).forEach(asset => {
       if (asset.totalQuantity > 0) {
@@ -412,7 +478,7 @@ async function renderPortfolioSummary() {
       // Total general
       fullHtml += `<div class="dividend-line"><strong>Total:</strong> ${formatCurrency(totalBruto)} | ${formatCurrency(totalNeto)} (Neto)</div>`;
 
-      // Por año
+      // Por aÃ±o
       const divByYear = {};
       for (const d of dividends) {
         const year = new Date(d.date).getFullYear();
@@ -431,7 +497,7 @@ async function renderPortfolioSummary() {
         fullHtml += `</div>`;
       }
 
-      // Botón de detalle + contenedor colapsable
+      // BotÃ³n de detalle + contenedor colapsable
       fullHtml += `
         <button id="toggleDividendDetail" class="btn-primary" style="margin-top:12px; padding:10px; font-size:0.95rem; width:auto;">
           Ver detalle
@@ -448,7 +514,7 @@ async function renderPortfolioSummary() {
     // --- RESUMEN DE VENTAS REALIZADAS ---
     const sales = transactions.filter(t => t.type === 'sell');
     if (sales.length > 0) {
-      // Agrupar ventas por símbolo para calcular ganancia real (FIFO simple)
+      // Agrupar ventas por sÃ­mbolo para calcular ganancia real (FIFO simple)
       const salesBySymbol = {};
       for (const sale of sales) {
         if (!salesBySymbol[sale.symbol]) {
@@ -553,7 +619,7 @@ async function renderPortfolioSummary() {
       groupsHtml += `<div class="asset-list" data-type="${type}">`;
       for (const a of orderedList) {
         const gainPct = a.totalInvested > 0 ? a.gain / a.totalInvested : 0;
-        const gainIcon = a.gain >= 0 ? '📈' : '📉';
+        const gainIcon = a.gain >= 0 ? 'ðŸ“ˆ' : 'ðŸ“‰';
         const gainColor = a.gain >= 0 ? 'green' : 'red';
         const typeClass = type;
         groupsHtml += `
@@ -575,7 +641,7 @@ async function renderPortfolioSummary() {
     // --- RENDERIZAR TODO JUNTO ---
     summaryContainer.innerHTML = fullHtml;
 
-    // --- LÓGICA DE DRAG & DROP ---
+    // --- LÃ“GICA DE DRAG & DROP ---
     document.querySelectorAll('.asset-list').forEach(list => {
       list.addEventListener('dragstart', e => {
         if (e.target.classList.contains('asset-item')) {
@@ -616,7 +682,7 @@ async function renderPortfolioSummary() {
       });
     });
 
-    // --- BOTÓN DE DETALLE DE DIVIDENDOS ---
+    // --- BOTÃ“N DE DETALLE DE DIVIDENDOS ---
     const toggleBtn = document.getElementById('toggleDividendDetail');
     if (toggleBtn) {
       toggleBtn.onclick = function() {
@@ -627,7 +693,7 @@ async function renderPortfolioSummary() {
       };
     }
 
-    // --- LÓGICA DE FILTROS ---
+    // --- LÃ“GICA DE FILTROS ---
     const filterButtons = document.querySelectorAll('.filter-btn');
     filterButtons.forEach(btn => {
       btn.onclick = () => {
@@ -688,7 +754,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-                               }
+      }
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryContainer = document.getElementById('summary-by-type');
@@ -1179,7 +1245,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-}
+      }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
