@@ -153,150 +153,10 @@ function showConfirm(message, onConfirm) {
   };
 }
 
-// --- Gestión de API key de Alpha Vantage ---
-function getAlphaVantageKey() {
-  return localStorage.getItem('alphaVantageKey') || null;
-}
-
-function saveAlphaVantageKey(key) {
-  if (key && key.trim()) {
-    localStorage.setItem('alphaVantageKey', key.trim());
-  }
-}
-
-async function requestAlphaVantageKey() {
-  return new Promise((resolve) => {
-    const form = `
-      <p>Alpha Vantage es necesario para actualizar precios de acciones y ETFs.</p>
-      <p>Obtén una clave gratis en <a href="https://www.alphavantage.co/support/#api-key" target="_blank">alphavantage.co</a>.</p>
-      <div class="form-group">
-        <label>API Key:</label>
-        <input type="text" id="apiKeyInput" placeholder="Ej: demo o tu clave" style="width:100%; padding:10px; margin:8px 0;" />
-      </div>
-      <button id="btnSaveKey" class="btn-primary">Guardar y continuar</button>
-      <button id="btnSkipKey" class="btn-delete" style="margin-left:8px;">Saltar (solo hoy)</button>
-    `;
-    openModal('🔑 Clave de Alpha Vantage', form);
-
-    const saveBtn = document.getElementById('btnSaveKey');
-    const skipBtn = document.getElementById('btnSkipKey');
-    const input = document.getElementById('apiKeyInput');
-
-    saveBtn.onclick = () => {
-      const key = input.value.trim();
-      if (key) {
-        saveAlphaVantageKey(key);
-        document.getElementById('modalOverlay').style.display = 'none';
-        resolve(key);
-      } else {
-        showToast('Por favor, introduce una clave.');
-      }
-    };
-
-    skipBtn.onclick = () => {
-      document.getElementById('modalOverlay').style.display = 'none';
-      resolve(null);
-    };
-
-    // Permitir Enter
-    input.onkeypress = (e) => {
-      if (e.key === 'Enter') saveBtn.click();
-    };
-  });
-}
-
-// --- CONVERSIÓN USD → EUR (estricta, sin fallback) ---
-let usdToEurCache = null;
-let usdToEurTimestamp = 0;
-
-async function getUsdToEurRate() {
-  const now = Date.now();
-  // Reutilizar caché si tiene menos de 1 hora
-  if (usdToEurCache && now - usdToEurTimestamp < 3600000) {
-    return usdToEurCache;
-  }
-
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=usd&vs_currencies=eur');
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rate = data.usd?.eur;
-    if (rate && rate > 0.5 && rate < 1.5) { // Rango razonable
-      usdToEurCache = rate;
-      usdToEurTimestamp = now;
-      return rate;
-    }
-  } catch (err) {
-    console.warn('⚠️ No se pudo obtener USD/EUR.');
-  }
-  return null; // ❌ Sin fallback: si falla, no hay tipo de cambio
-}
-
-// --- FUNCIONES PARA PRECIOS CON ALPHA VANTAGE + CONVERSIÓN SEGURA ---
+// --- SOLO CRIPTOMONEDAS: acciones/ETFs no se actualizan automáticamente ---
 async function fetchStockPrice(symbol) {
-  let API_KEY = getAlphaVantageKey();
-  if (!API_KEY) {
-    API_KEY = await requestAlphaVantageKey();
-    if (!API_KEY) return null;
-  }
-
-  // Probar en orden: 1) símbolo original, 2) con sufijo
-  const attempts = [symbol];
-  const symbolMap = {
-    'BBVA': 'BBVA.MC', 'SAN': 'SAN.MC', 'IBE': 'IBE.MC', 'TEF': 'TEF.MC',
-    'REP': 'REP.MC', 'ITX': 'ITX.MC', 'AMS': 'AMS.MC', 'ELE': 'ELE.MC',
-    'FER': 'FER.MC', 'CABK': 'CABK.MC', 'MAP': 'MAP.MC',
-    'OR': 'OR.PA', 'MC': 'MC.PA', 'BNP': 'BNP.PA', 'AI': 'AI.PA',
-    'DG': 'DG.PA', 'RI': 'RI.PA', 'FP': 'FP.PA',
-    'SAP': 'SAP.DE', 'DTE': 'DTE.DE', 'ALV': 'ALV.DE', 'BMW': 'BMW.DE',
-    'DAI': 'DAI.DE', 'SIE': 'SIE.DE',
-    'ENI': 'ENI.MI', 'ISP': 'ISP.MI', 'UCG': 'UCG.MI', 'STM': 'STM.MI',
-    'ASML': 'ASML.AS', 'RDSA': 'RDSA.AS',
-    'NESN': 'NESN.SW', 'ROG': 'ROG.SW'
-  };
-
-  const mapped = symbolMap[symbol.toUpperCase()];
-  if (mapped && !attempts.includes(mapped)) {
-    attempts.push(mapped);
-  }
-
-  let priceUsd = null;
-  let usedSymbol = null;
-
-  for (const sym of attempts) {
-    try {
-      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(sym)}&apikey=${API_KEY}`;
-      const res = await fetch(url);
-      if (!res.ok) continue;
-      const data = await res.json();
-      const priceStr = data['Global Quote']?.['05. price'];
-      if (priceStr) {
-        const price = parseFloat(priceStr);
-        if (price > 0) {
-          priceUsd = price;
-          usedSymbol = sym;
-          break;
-        }
-      }
-    } catch (err) {
-      console.warn(`Alpha Vantage falló para ${sym}:`, err.message);
-    }
-  }
-
-  if (priceUsd === null) {
-    return null;
-  }
-
-  // 🔑 Conversión obligatoria: si falla, no devolver precio
-  const usdToEur = await getUsdToEurRate();
-  if (usdToEur === null) {
-    console.warn(`❌ No se pudo convertir ${usedSymbol} a EUR. Precio no actualizado.`);
-    return null; // 🚫 No guardar precio si no hay conversión
-  }
-
-  const priceEur = priceUsd * usdToEur;
-  console.log(`✅ ${usedSymbol}: ${priceUsd} USD → ${priceEur.toFixed(4)} EUR`);
-  return priceEur;
+  // ❌ No se actualizan acciones/ETFs automáticamente
+  return null;
 }
 
 async function fetchCryptoPrice(symbol) {
@@ -754,7 +614,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-      }
+            }
 async function renderPortfolioSummary() {
   const summaryTotals = document.getElementById('summary-totals');
   const summaryContainer = document.getElementById('summary-by-type');
@@ -1245,7 +1105,7 @@ function openModal(title, content) {
   overlay.onclick = (e) => {
     if (e.target === overlay) closeModal();
   };
-      }
+  }
 async function showAddTransactionForm() {
   // Cargar todos los nombres únicos por tipo
   const allTransactions = await db.transactions.toArray();
@@ -1680,27 +1540,16 @@ async function refreshPrices() {
     return;
   }
 
-  // Agrupar por símbolo y obtener el assetType (asumiendo que es consistente)
-  const symbolsInfo = {};
-  for (const t of transactions) {
-    if (!symbolsInfo[t.symbol]) {
-      symbolsInfo[t.symbol] = t.assetType;
-    }
-  }
+  // Solo actualizar criptomonedas
+  const cryptoSymbols = [...new Set(
+    transactions
+      .filter(t => t.assetType === 'crypto')
+      .map(t => t.symbol)
+  )];
 
-  const symbols = Object.keys(symbolsInfo);
   let updated = 0;
-
-  for (const symbol of symbols) {
-    let price = null;
-    const assetType = symbolsInfo[symbol];
-
-    if (assetType === 'crypto') {
-      price = await fetchCryptoPrice(symbol);
-    } else {
-      price = await fetchStockPrice(symbol);
-    }
-
+  for (const symbol of cryptoSymbols) {
+    const price = await fetchCryptoPrice(symbol);
     if (price !== null) {
       await saveCurrentPrice(symbol, price);
       updated++;
@@ -1708,7 +1557,11 @@ async function refreshPrices() {
   }
 
   await renderPortfolioSummary();
-  showToast(`Precios actualizados: ${updated}/${symbols.length}`);
+  if (cryptoSymbols.length > 0) {
+    showToast(`✅ Precios de cripto actualizados: ${updated}/${cryptoSymbols.length}`);
+  } else {
+    showToast('ℹ️ No hay criptomonedas para actualizar.');
+  }
 }
 
 function showManualPriceUpdate() {
